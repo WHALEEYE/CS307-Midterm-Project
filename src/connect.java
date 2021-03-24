@@ -30,8 +30,22 @@ public class connect {
             int n = jsonArray.size();
             insert_Course(jsonArray, conn, n);  //course表中数据的输入
             insert_Class(jsonArray, conn, n);   //class表中数据的输入
+            insert_pre(jsonArray, conn, n); //先修课输入 转换成数字及符号
         } catch (JsonIOException | FileNotFoundException | JsonSyntaxException e) {
             e.printStackTrace();
+        }
+    }
+    //course数据的输入封装
+    private static void insert_Course(JsonArray jsonArray, Connection conn, int n) throws SQLException {
+        for (int i = 0; i < n; i++) {
+            //从json文件中读取对应序号的信息，创造course_info对象，准备后续输入数据库中
+            course_info course_info = new course_info();
+            jsonToCourse(jsonArray, i, course_info);
+            //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
+            String sql_addCourseIfNotExist = "INSERT INTO course(id, totalCapacity, courseId, courseHour, courseCredit, courseName, courseDept) VALUES(DEFAULT,?,?,?,?,?,?)" + "ON conflict(courseId)  DO NOTHING;";
+            PreparedStatement ps_addCourse = conn.prepareStatement(sql_addCourseIfNotExist, Statement.RETURN_GENERATED_KEYS);
+            //将course_info对象中的信息导入数据库中
+            courseToDatabase(ps_addCourse, course_info);
         }
     }
 
@@ -51,18 +65,23 @@ public class connect {
             classToDatabase(ps_add_class, class_info);
         }
     }
-
-    //course数据的输入封装
-    private static void insert_Course(JsonArray jsonArray, Connection conn, int n) throws SQLException {
+    private static void insert_pre(JsonArray jsonArray, Connection conn, int n) throws SQLException {
         for (int i = 0; i < n; i++) {
-            //从json文件中读取对应序号的信息，创造course_info对象，准备后续输入数据库中
-            course_info course_info = new course_info();
-            jsonToCourse(jsonArray, i, course_info);
-            //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
-            String sql_addCourseIfNotExist = "INSERT INTO course(id, totalCapacity, courseId, courseHour, courseCredit, courseName, courseDept) VALUES(DEFAULT,?,?,?,?,?,?)" + "ON conflict(courseId)  DO NOTHING;";
-            PreparedStatement ps_addCourse = conn.prepareStatement(sql_addCourseIfNotExist, Statement.RETURN_GENERATED_KEYS);
-            //将course_info对象中的信息导入数据库中
-            courseToDatabase(ps_addCourse, course_info);
+            prerequisite prerequisite = new prerequisite();
+            //构造查询 根据courseName查询course的id
+            String get_courseId = "select id from course where coursename = ?";
+            PreparedStatement get_CourseId = conn.prepareStatement(get_courseId);
+            jsonToPre(jsonArray, get_CourseId, i, prerequisite);
+
+
+            //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句（待完成）
+
+
+
+            //将prerequisite对象中的信息导入数据库中（待完成）
+
+
+
         }
     }
 
@@ -98,6 +117,104 @@ public class connect {
             class_info.setTeacher(null);
         else
             class_info.setTeacher(jsonOBJ_classArray.get("teacher").getAsString());
+    }
+
+    private static void jsonToPre(JsonArray jsonArray, PreparedStatement ps_get_pre, int index, prerequisite prerequisite) throws SQLException{
+        JsonObject jsonOBJ_Pre = jsonArray.get(index).getAsJsonObject();
+        String course_Name = jsonOBJ_Pre.get("courseName").getAsString();
+        //由于标间外键的存在，插入之前先要查询对应course_Name的courseId
+        ps_get_pre.setString(1, course_Name);
+        ResultSet resultSet = ps_get_pre.executeQuery();
+        resultSet.next();
+        int courseId = resultSet.getInt("id");
+        prerequisite.setCourseId(courseId);
+
+        //获取原始prerequisite字符串
+        String pre = jsonOBJ_Pre.get("prerequisite").getAsString();
+        //转换
+        if (pre != null){
+            //以空格分割
+            String[] arr = pre.split("\\s+");
+
+            //给括号加了间距的新数组
+            int ind = 0;   //tem数组每个时刻的位置
+            String[] tem= new String[2 * arr.length];
+            for (String value : arr) {
+                if (value.charAt(0) == '(') {
+                    tem[ind] = "(";
+                    ind++;
+                    tem[ind] = value.substring(1);
+                } else if (value.charAt(value.length() - 1) == ')') {
+                    int length = value.length();
+                    tem[ind] = value.substring(0, length - 1);
+                    ind++;
+                    tem[ind] = ")";
+                } else {
+                    tem[ind] = value;
+                }
+                ind++;
+            }
+
+            //新字符串
+            StringBuilder final_str = new StringBuilder();
+            for (int i = 0; i < tem.length; i++) {
+                if (tem[i] != null){
+                    final_str.append(tem[i]);
+                    if (i != tem.length - 1){
+                        final_str.append(" ");
+                    }
+                }else {
+                    break;
+                }
+            }
+
+            //以空格分割
+            String[] new_arr = final_str.toString().split("\\s+");
+
+            //替换加入最终数组中
+            String[] fin_arr = new String[new_arr.length];
+            int t = 0;
+            for(int i = 0; i < fin_arr.length; i++){
+                switch (new_arr[i]) {
+                    case "(", ")" -> fin_arr[t] = new_arr[i];
+
+                    case "或者" -> fin_arr[t] = "+"; //或者用“+”替换
+
+                    case "并且" -> fin_arr[t] = "*"; // "并且" -> "*"
+                    default -> {
+                        if (new_arr[i].equals("化学原理")){
+                            if (i + 1 < new_arr.length && (new_arr[i + 1].equals("A") || new_arr[i + 1].equals("B"))){
+                                fin_arr[t] = "化学原理 " + new_arr[i + 1];
+                                i++;
+                                ps_get_pre.setString(1, fin_arr[t]);
+                            }else {
+                                ps_get_pre.setString(1, new_arr[i]);
+                            }
+                        }
+                        ResultSet result_Set = ps_get_pre.executeQuery();
+                        resultSet.next();
+                        int course_Id = resultSet.getInt("id");
+                        fin_arr[t] = course_Id + "";
+                    }
+                }
+                t++;
+            }
+
+            //生成替换后的字符串(形式为: ( 1 + 2) * 3 )
+            StringBuilder final_Str = new StringBuilder();
+            for (int i = 0; i < fin_arr.length; i++){
+                if (fin_arr[i] != null){
+                    if (i != fin_arr.length - 1){
+                        final_Str.append(fin_arr[i]);
+                        final_Str.append(" ");
+                    }else {
+                        final_Str.append(fin_arr[i]);
+                    }
+                }else {
+                    break;
+                }
+            }
+        }
     }
     //将java对象中存储的数据导入数据库的组件
     private static void courseToDatabase(PreparedStatement ps_addCourse, course_info course_info) throws SQLException {
