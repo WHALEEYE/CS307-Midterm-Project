@@ -1,65 +1,67 @@
 public class classList {
-    private int id;
-    private int classId;
-    private String[] weekList;
-    private String location;
-    private String classTime;
-    private int weekday;
 
-    public classList(int id, int classId, String[] weekList, String location, String classTime, int weekday) {
-        this.id = id;
-        this.classId = classId;
-        this.weekList = weekList;
-        this.location = location;
-        this.classTime = classTime;
-        this.weekday = weekday;
-    }
+  private int id;
+  private int classId;
+  private String[] weekList;
+  private String location;
+  private String classTime;
+  private int weekday;
 
-    public int getId() {
-        return id;
-    }
+  public classList(int id, int classId, String[] weekList, String location, String classTime,
+      int weekday) {
+    this.id = id;
+    this.classId = classId;
+    this.weekList = weekList;
+    this.location = location;
+    this.classTime = classTime;
+    this.weekday = weekday;
+  }
 
-    public void setId(int id) {
-        this.id = id;
-    }
+  public int getId() {
+    return id;
+  }
 
-    public int getClassId() {
-        return classId;
-    }
+  public void setId(int id) {
+    this.id = id;
+  }
 
-    public void setClassId(int classId) {
-        this.classId = classId;
-    }
+  public int getClassId() {
+    return classId;
+  }
 
-    public String[] getWeekList() {
-        return weekList;
-    }
+  public void setClassId(int classId) {
+    this.classId = classId;
+  }
 
-    public void setWeekList(String[] weekList) {
-        this.weekList = weekList;
-    }
+  public String[] getWeekList() {
+    return weekList;
+  }
 
-    public String getLocation() {
-        return location;
-    }
+  public void setWeekList(String[] weekList) {
+    this.weekList = weekList;
+  }
 
-    public void setLocation(String location) {
-        this.location = location;
-    }
+  public String getLocation() {
+    return location;
+  }
 
-    public String getClassTime() {
-        return classTime;
-    }
+  public void setLocation(String location) {
+    this.location = location;
+  }
 
-    public void setClassTime(String classTime) {
-        this.classTime = classTime;
-    }
+  public String getClassTime() {
+    return classTime;
+  }
 
-    public int getWeekday() {
-        return weekday;
-    }
+  public void setClassTime(String classTime) {
+    this.classTime = classTime;
+  }
 
-    public void setWeekday(int weekday) {
-        this.weekday = weekday;
-    }
+  public int getWeekday() {
+    return weekday;
+  }
+
+  public void setWeekday(int weekday) {
+    this.weekday = weekday;
+  }
 }

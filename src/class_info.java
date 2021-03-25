@@ -1,46 +1,49 @@
 public class class_info {
-    private int id;
-    private int courseId;
-    private String className;
-    private String teacher;
 
-    public class_info(){}
-    public class_info(int id, int courseId, String className, String teacher) {
-        this.id = id;
-        this.courseId = courseId;
-        this.className = className;
-        this.teacher = teacher;
-    }
+  private int id;
+  private int courseId;
+  private String className;
+  private String teacher;
 
-    public int getId() {
-        return id;
-    }
+  public class_info() {
+  }
 
-    public void setId(int id) {
-        this.id = id;
-    }
+  public class_info(int id, int courseId, String className, String teacher) {
+    this.id = id;
+    this.courseId = courseId;
+    this.className = className;
+    this.teacher = teacher;
+  }
 
-    public int getCourseId() {
-        return courseId;
-    }
+  public int getId() {
+    return id;
+  }
 
-    public void setCourseId(int courseId) {
-        this.courseId = courseId;
-    }
+  public void setId(int id) {
+    this.id = id;
+  }
 
-    public String getClassName() {
-        return this.className;
-    }
+  public int getCourseId() {
+    return courseId;
+  }
 
-    public void setClassName(String className) {
-        this.className = className;
-    }
+  public void setCourseId(int courseId) {
+    this.courseId = courseId;
+  }
 
-    public String getTeacher() {
-        return this.teacher;
-    }
+  public String getClassName() {
+    return this.className;
+  }
 
-    public void setTeacher(String teacher) {
-        this.teacher = teacher;
-    }
+  public void setClassName(String className) {
+    this.className = className;
+  }
+
+  public String getTeacher() {
+    return this.teacher;
+  }
+
+  public void setTeacher(String teacher) {
+    this.teacher = teacher;
+  }
 }

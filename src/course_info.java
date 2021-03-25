@@ -1,51 +1,58 @@
 public class course_info {
-    private int id;
-    private int totalCapacity;
-    private String courseId;
-    private int courseHour;
-    private int courseCredit;
-    private String courseName;
-    private String courseDept;
 
-    public int getTotalCapacity() {
-        return totalCapacity;
-    }
-    public void setTotalCapacity(int totalCapacity) {
-        this.totalCapacity = totalCapacity;
-    }
+  private int id;
+  private int totalCapacity;
+  private String courseId;
+  private int courseHour;
+  private int courseCredit;
+  private String courseName;
+  private String courseDept;
 
-    public String getCourseId() {
-        return courseId;
-    }
-    public void setCourseId(String courseId) {
-        this.courseId = courseId;
-    }
+  public int getTotalCapacity() {
+    return totalCapacity;
+  }
 
-    public int getCourseHour() {
-        return courseHour;
-    }
-    public void setCourseHour(int courseHour) {
-        this.courseHour = courseHour;
-    }
+  public void setTotalCapacity(int totalCapacity) {
+    this.totalCapacity = totalCapacity;
+  }
 
-    public int getCourseCredit() {
-        return courseCredit;
-    }
-    public void setCourseCredit(int courseCredit) {
-        this.courseCredit = courseCredit;
-    }
+  public String getCourseId() {
+    return courseId;
+  }
 
-    public String getCourseName() {
-        return courseName;
-    }
-    public void setCourseName(String courseName) {
-        this.courseName = courseName;
-    }
+  public void setCourseId(String courseId) {
+    this.courseId = courseId;
+  }
 
-    public String getCourseDept() {
-        return courseDept;
-    }
-    public void setCourseDept(String courseDept) {
-        this.courseDept = courseDept;
-    }
+  public int getCourseHour() {
+    return courseHour;
+  }
+
+  public void setCourseHour(int courseHour) {
+    this.courseHour = courseHour;
+  }
+
+  public int getCourseCredit() {
+    return courseCredit;
+  }
+
+  public void setCourseCredit(int courseCredit) {
+    this.courseCredit = courseCredit;
+  }
+
+  public String getCourseName() {
+    return courseName;
+  }
+
+  public void setCourseName(String courseName) {
+    this.courseName = courseName;
+  }
+
+  public String getCourseDept() {
+    return courseDept;
+  }
+
+  public void setCourseDept(String courseDept) {
+    this.courseDept = courseDept;
+  }
 }
