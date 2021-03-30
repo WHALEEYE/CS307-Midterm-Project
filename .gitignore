@@ -32,3 +32,7 @@ hs_err_pid*
 *.iml
 out
 gen
+
+
+# Large files
+select_course.csv
