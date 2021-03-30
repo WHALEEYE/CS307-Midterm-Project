@@ -1,22 +1,9 @@
 public class prerequisite {
 
-  private int id;
   private int courseId;
-  private int[] requisiteCourseId;
+  private String prerequisite_list;
 
-  public prerequisite(int id, int courseId, int[] requisiteCourseId) {
-    this.id = id;
-    this.courseId = courseId;
-    this.requisiteCourseId = requisiteCourseId;
-  }
-
-  public int getId() {
-    return id;
-  }
-
-  public void setId(int id) {
-    this.id = id;
-  }
+  public prerequisite(){}
 
   public int getCourseId() {
     return courseId;
@@ -26,11 +13,11 @@ public class prerequisite {
     this.courseId = courseId;
   }
 
-  public int[] getRequisiteCourseId() {
-    return requisiteCourseId;
+  public String getPrerequisite_list() {
+    return prerequisite_list;
   }
 
-  public void setRequisiteCourseId(int[] requisiteCourseId) {
-    this.requisiteCourseId = requisiteCourseId;
+  public void setPrerequisite_list(String prerequisite_list) {
+    this.prerequisite_list = prerequisite_list;
   }
 }
