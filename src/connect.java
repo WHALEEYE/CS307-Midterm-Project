@@ -35,7 +35,7 @@ public class connect {
 
     try {
       //新建解析json文件的模块
-      String dataPath = "./source_data/course_info.json";//配置解析的文本路径
+      String dataPath = "./source_data/output.json";//配置解析的文本路径
       JsonParser parser = new JsonParser();  //创建JSON解析器
       BufferedReader in = new BufferedReader(
           new InputStreamReader(new FileInputStream(dataPath), StandardCharsets.UTF_8),
@@ -51,9 +51,9 @@ public class connect {
 
       //程序化对数据库输入数据:  (int::n = 100只在测试阶段使用,后期换成json文件的长度)
       int n = jsonArray.size();
-      // insert_Course(jsonArray, conn, n);  //course表中数据的输入
-      // insert_Class(jsonArray, conn, n);   //class表中数据的输入
-      // insert_pre(jsonArray, conn, n);     //先修课输入 转换成数字及符号
+      //insert_Course(jsonArray, conn, n);  //course表中数据的输入
+      //insert_Class(jsonArray, conn, n);   //class表中数据的输入
+      insert_pre(jsonArray, conn, n);     //先修课输入 转换成数字及符号
       // insert_teacher(jsonArray, conn, n); //teacher表中数据的输入
       // insert_student(br, conn, n);
 
@@ -168,7 +168,7 @@ public class connect {
     JsonObject jsonOBJ_classArray = jsonArray.get(index).getAsJsonObject();
     String course_Name = jsonOBJ_classArray.get("courseName").getAsString();
 
-    //由于标间外键的存在，插入之前先要查询对应course_Name的courseId
+    //由于表间外键的存在，插入之前先要查询对应course_Name的courseId
     ps_get_CourseId.setString(1, course_Name);
     ResultSet resultSet = ps_get_CourseId.executeQuery();
     resultSet.next();
@@ -211,13 +211,12 @@ public class connect {
     JsonObject jsonOBJ_Pre = jsonArray.get(index).getAsJsonObject();
     String course_Name = jsonOBJ_Pre.get("courseName").getAsString();
 
-    // 由于标间外键的存在，插入之前先要查询对应course_Name的courseId
+    // 由于表间外键的存在，插入之前先要查询对应course_Name的courseId
     ps_get_pre.setString(1, course_Name);
     ResultSet resultSet = ps_get_pre.executeQuery();
-    if (resultSet.next()) {
-      int courseId = resultSet.getInt("id");
-      prerequisite.setCourseId(courseId);
-    }
+    resultSet.next();
+    int courseId = resultSet.getInt("id");
+    prerequisite.setCourseId(courseId);
 
     // 检测先修课是否为空并且获取原始prerequisite字符串
     String pre;
@@ -228,53 +227,54 @@ public class connect {
       pre = jsonOBJ_Pre.get("prerequisite").getAsString();
     }
 
-    // 开始对字符产的转换处理模块
-    // 以空格分割
-    String[] arr = pre.split("\\s+");
+    // 开始对字符串的转换处理模块
+    // 以'|'分割
+    String[] arr = pre.split("\\|");
 
-    // 给括号加了间距的新数组
-    int ind = 0;   //tem数组每个时刻的位置
-    String[] tem = new String[2 * arr.length];
-    for (String value : arr) {
-      if (value.charAt(0) == '(') {
-        tem[ind] = "(";
-        ind++;
-        tem[ind] = value.substring(1);
-      } else if (value.charAt(value.length() - 1) == ')') {
-        int length = value.length();
-        tem[ind] = value.substring(0, length - 1);
-        ind++;
-        tem[ind] = ")";
-      } else {
-        tem[ind] = value;
-      }
-      ind++;
-    }
+//    // 给括号加了间距的新数组
+//    int ind = 0;   //tem数组每个时刻的位置
+//    String[] tem = new String[2 * arr.length];
+//    for (String value : arr) {
+//      if (value.charAt(0) == '(') {
+//        tem[ind] = "(";
+//        ind++;
+//        tem[ind] = value.substring(1);
+//      } else if (value.charAt(value.length() - 1) == ')') {
+//        int length = value.length();
+//        tem[ind] = value.substring(0, length - 1);
+//        ind++;
+//        tem[ind] = ")";
+//      } else {
+//        tem[ind] = value;
+//      }
+//      ind++;
+//    }
 
-    // 新字符串
-    StringBuilder final_str = new StringBuilder();
-    for (int i = 0; i < tem.length; i++) {
-      if (tem[i] != null) {
-        final_str.append(tem[i]);
-        if (i != tem.length - 1) {
-          final_str.append(" ");
-        }
-      } else {
-        break;
-      }
-    }
+//    // 新字符串
+//    StringBuilder final_str = new StringBuilder();
+//    for (int i = 0; i < tem.length; i++) {
+//      if (tem[i] != null) {
+//        final_str.append(tem[i]);
+//        if (i != tem.length - 1) {
+//          final_str.append(" ");
+//        }
+//      } else {
+//        break;
+//      }
+//    }
 
-    // 以空格分割
-    String[] new_arr = final_str.toString().split("\\s+");
+//    // 以空格分割
+//    String[] new_arr = final_str.toString().split("\\|");
 
     // 临时变量
     String temp;
 
     //替换加入最终数组中
-    int[] fin_arr = new int[new_arr.length];
+    int lgh = arr.length;
+    int[] fin_arr = new int[lgh];
     int t = 0;
-    for (int i = 0; i < fin_arr.length; i++) {
-      switch (new_arr[i]) {
+    for (String s : arr) {
+      switch (s) {
         case "(":
           fin_arr[t] = -3;
           break;
@@ -282,43 +282,31 @@ public class connect {
           fin_arr[t] = -4;
           break;
         case "或者":
-          fin_arr[t] = -1; // 或者 -> -1
+          if (fin_arr[t] != -5) {
+            fin_arr[t] = -1; // 或者 -> -1
+          } else {
+            t--;
+          }
           break;
         case "并且":
-          fin_arr[t] = -2; // 并且 -> -2
+          if (fin_arr[t] != -5) {
+            fin_arr[t] = -2; // 并且 -> -2
+          } else {
+            t--;
+          }
           break;
         default: {
-//                        if (new_arr[i].equals("化学原理")){
-//                            if (i + 1 < new_arr.length && (new_arr[i + 1].equals("A") || new_arr[i + 1].equals("B"))){
-//                                fin_arr[t] = "化学原理 " + new_arr[i + 1];
-//                                i++;
-//                                ps_get_pre.setString(1, fin_arr[t]);
-//                            }else {
-//                                ps_get_pre.setString(1, new_arr[i]);
-//                            }
-//                        }
-//                        ResultSet result_Set = ps_get_pre.executeQuery();
-//                        resultSet.next();
-//                        int course_Id = resultSet.getInt("id");
-//                        fin_arr[t] = course_Id + "";
-          if (i + 1 < new_arr.length && new_arr[i + 1].length() == 1
-              && new_arr[i + 1].charAt(0) <= 90
-              && new_arr[i + 1].charAt(0) >= 65) {
-            temp = new_arr[i] + " " + new_arr[i + 1];
-            i++;
-            ps_get_pre.setString(1, temp);
-          } else {
-            ps_get_pre.setString(1, new_arr[i]);
-          }
+          ps_get_pre.setString(1, s);
           ResultSet result_Set = ps_get_pre.executeQuery();
           if (result_Set.next()) {
             int course_Id = result_Set.getInt("id");
             fin_arr[t] = course_Id;
           } else {
-            t--;
-            //这里出现数组越界
+            fin_arr[t] = -5;
             if (t >= 1 && (fin_arr[t - 1] == -1 || fin_arr[t - 1] == -2)) {
-              t--;
+              fin_arr[t - 1] = -5;
+            } else if (t <= lgh - 2) {
+              fin_arr[t + 1] = -5;
             }
           }
           break;
@@ -354,12 +342,7 @@ public class connect {
           break;
         case -4:
           while (true) {
-            //数组越界
-            if (top >= 1) {
-              temp_int = stack[--top];
-            } else {
-              break;
-            }
+            temp_int = stack[--top];
             if (temp_int == -3) {
               break;
             } else {
@@ -374,13 +357,16 @@ public class connect {
           break;
       }
     }
+    while (top >= 1) {
+      fin_arr[ptr++] = stack[--top];
+    }
 
     // 数组转化为字符串，待储存
-    final_str = new StringBuilder();
+    StringBuilder final_str = new StringBuilder();
     for (int i = 0; i < ptr; i++) {
       final_str.append(fin_arr[i]);
       if (i != ptr - 1) {
-        final_str.append(" ");
+        final_str.append("|");
       }
     }
 
