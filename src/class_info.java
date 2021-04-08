@@ -4,15 +4,16 @@ public class class_info {
   private int courseId;
   private String className;
   private String teacher;
+  private String courseName;
 
-  public class_info() {
+  public class_info() {}
+
+  public String getCourseName() {
+    return courseName;
   }
 
-  public class_info(int id, int courseId, String className, String teacher) {
-    this.id = id;
-    this.courseId = courseId;
-    this.className = className;
-    this.teacher = teacher;
+  public void setCourseName(String courseName) {
+    this.courseName = courseName;
   }
 
   public int getId() {

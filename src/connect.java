@@ -1,159 +1,618 @@
 import com.google.gson.JsonArray;
-import com.google.gson.JsonIOException;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStreamReader;
+
+import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
+import java.util.HashMap;
+import java.util.Map;
 
 public class connect {
+  //连接数据库所需要的参数
+  private static String host;
+  private static String dbName;
+  private static String user;
+  private static String password;
 
-  public static void main(String[] args) throws Exception {
-    // 参数：
-    // jdbc协议:postgresql子协议://主机地址:数据库端口号/要连接的数据库名
-    String url = "jdbc:postgresql://121.4.163.50:10943/test_fei";
-    // 数据库用户名
-    String user = "postgres";
-    // 数据库密码
-    String password = "What1sth1s";
+  //json文件单次导入的条数
+  private static final int  BATCH_SIZE = 1000;
+  //csv文件单次导入的条数
+  private static final int  BATCH_SIZE_2 = 20000;
+
+  //执行sql语句所需的组件
+  private static Connection conn = null;
+  private static PreparedStatement stmt = null;
+  private static PreparedStatement stmt2 = null;
+
+  //文件系统的输入来源
+  private static JsonArray jsonArray = null;
+  private static JsonArray jsonArray_classList = null;
+  private static BufferedReader br = null;
+
+  //加速导入用到的数据结构
+  private static final Map<String, Integer> MAP_course = new HashMap<>();
+  private static final Map<String, Integer> MAP_class = new HashMap<>();
+
+  /***************************************开关数据库相关组件***********************************************/
+  //测试数据库开关功能，并且加载数据
+  public static void testConnection(String _host, String _dbName, String _user, String _password) {
+    System.out.println("\033[33;4m" + "**************  START TEST CONNECTION  **************" + "\033[0m");
+    host = _host;
+    dbName = _dbName;
+    user = _user;
+    password = _password;
+    OpenDB();
+    CloseDB();
+    System.out.println("\033[32;4m" + "**************         SUCCESS         **************\n\n" + "\033[0m");
+  }
+  //开启数据库
+  private static void OpenDB() {
+    String url = "jdbc:postgresql://" + host + "/" + dbName;
 
     // 1. 加载Driver类，Driver类对象将自动被注册到DriverManager类中
-    java.lang.Class.forName("org.postgresql.Driver");
-    // 2. 连接数据库，返回连接对象
-    Connection conn = DriverManager.getConnection(url, user, password);
+    try {
+      Class.forName("org.postgresql.Driver");
+    } catch(Exception e) {
+      System.err.println("Cannot find the Postgres driver. Check CLASSPATH.");
+      System.exit(1);
+    }
 
+    // 2. 连接数据库，返回连接对象
+    try {
+      conn = DriverManager.getConnection(url, user, password);
+      System.out.println("Successfully connected to the database " + dbName + " as " + user);
+      conn.setAutoCommit(false);
+    } catch (SQLException e) {
+      System.err.println("Database connection failed");
+      System.err.println(e.getMessage());
+      System.exit(1);
+    }
+  }
+  //依据传入的sql语句建立prepareStatement
+  private static void create_PS(String sql) {
+    try {
+      if(conn != null) {
+        stmt = conn.prepareStatement(sql);
+      } else {
+        System.err.println("Connection unaccomplished");
+      }
+    } catch (SQLException e) {
+      System.err.println("Insert statement failed");
+      System.err.println(e.getMessage());
+      CloseDB();
+      System.exit(1);
+    }
+  }
+  private static void create_PS_2(String sql) {
+    try {
+      if(conn != null) {
+        stmt2 = conn.prepareStatement(sql);
+      } else {
+        System.err.println("Connection unaccomplished");
+      }
+    } catch (SQLException e) {
+      System.err.println("Insert statement failed");
+      System.err.println(e.getMessage());
+      CloseDB();
+      System.exit(1);
+    }
+  }
+  //关闭数据库
+  private static void CloseDB() {
+    if (conn != null) {
+      try {
+        if (stmt != null) {
+          stmt.close();
+          stmt = null;
+        }
+        conn.commit();
+        conn.close();
+        conn = null;
+        System.out.println("Successfully close the database " + dbName + " as " + user);
+      } catch (Exception e) {
+        System.err.println("Close database failed");
+        System.err.println(e.getMessage());
+        System.exit(1);
+      }
+    }
+  }
+
+  /***************************************加载文件相关组件***********************************************/
+  //加载json文件中的信息到jsonArray
+  public static void loadFromJson(String fileLocation) {
     try {
       //新建解析json文件的模块
-      String dataPath = "./source_data/output.json";//配置解析的文本路径
       JsonParser parser = new JsonParser();  //创建JSON解析器
       BufferedReader in = new BufferedReader(
-          new InputStreamReader(new FileInputStream(dataPath), StandardCharsets.UTF_8),
-          50 * 1024 * 1024); //设置缓冲区 编码
-      JsonArray jsonArray = (JsonArray) parser.parse(in);  //创建JsonArray对象
-
+              new InputStreamReader(new FileInputStream(fileLocation), StandardCharsets.UTF_8),
+              50 * 1024 * 1024); //设置缓冲区 编码
+      jsonArray = (JsonArray) parser.parse(in);  //创建JsonArray对象
+    } catch (FileNotFoundException e) {
+      System.err.println("No JSON file found");
+      System.err.println(e.getMessage());
+      System.exit(1);
+    }
+  }
+  //加载CSV文件中的信息到BufferedReader
+  public static void loadFromCSV(String fileLocation){
+    try {
       //新建解析csv的文件模块
-      BufferedReader br = new BufferedReader(
-          new InputStreamReader(
-              new FileInputStream("./source_data/select_course.csv")
-          )
-      );
-
-      //程序化对数据库输入数据:  (int::n = 100只在测试阶段使用,后期换成json文件的长度)
-      int n = jsonArray.size();
-      //insert_Course(jsonArray, conn, n);  //course表中数据的输入
-      //insert_Class(jsonArray, conn, n);   //class表中数据的输入
-      insert_pre(jsonArray, conn, n);     //先修课输入 转换成数字及符号
-      // insert_teacher(jsonArray, conn, n); //teacher表中数据的输入
-      // insert_student(br, conn, n);
-
-    } catch (JsonIOException | FileNotFoundException | JsonSyntaxException e) {
-      e.printStackTrace();
+      /*br = new BufferedReader(
+              new InputStreamReader(
+                      new FileInputStream(fileLocation)
+              )
+      );*/
+      br = new BufferedReader(new FileReader(fileLocation));
+    } catch (FileNotFoundException e) {
+      System.err.println("No CSV file found");
+      System.err.println(e.getMessage());
+      System.exit(1);
     }
   }
 
+  /***************************************输入数据库相关组件*********************************************/
   //course数据的输入封装
-  private static void insert_Course(JsonArray jsonArray, Connection conn, int n)
-      throws SQLException {
-    for (int i = 0; i < n; i++) {
-      //从json文件中读取对应序号的信息，创造course_info对象，准备后续输入数据库中
-      course_info course_info = new course_info();
-      jsonToCourse(jsonArray, i, course_info);
+  public static void insert_Course() {
+    System.out.println("\033[33;4m" + "**************  START LOADING COURSE  **************" + "\033[0m");
+    //清理原始数据,恢复自增列
+    try {
+      System.out.println("--START CLEAR TABLE COURSE--");
+      OpenDB();
+      if (conn != null) {
+        Statement stmt0 = conn.createStatement();
+        stmt0.execute("TRUNCATE TABLE course RESTART IDENTITY CASCADE");
+        stmt0.close();
+      }
+      CloseDB();
+      System.out.println("--FINISH CLEAR TABLE COURSE--\n");
+    } catch (SQLException e) {
+      System.err.println("TEST Database connection failed");
+      System.err.println(e.getMessage());
+      System.exit(1);
+    }
+
+    int n = jsonArray.size();
+    int cnt = 0;
+    MAP_course.clear();
+
+    //记录开始时间
+    long start = System.currentTimeMillis();
+    try {
+      System.out.println("--START INSERT INTO TABLE COURSE--");
+      OpenDB();
+
       //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
       String sql_addCourseIfNotExist =
-          "INSERT INTO course(id, totalCapacity, courseId, courseHour, courseCredit, courseName, courseDept) VALUES(DEFAULT,?,?,?,?,?,?)"
-              + "ON conflict(courseId)  DO NOTHING;";
-      PreparedStatement ps_addCourse = conn
-          .prepareStatement(sql_addCourseIfNotExist, Statement.RETURN_GENERATED_KEYS);
-      //将course_info对象中的信息导入数据库中
-      courseToDatabase(ps_addCourse, course_info);
-    }
-  }
+              "INSERT INTO course(id, totalCapacity, courseId, courseHour, courseCredit, courseName, courseDept) VALUES(?,?,?,?,?,?,?)"
+                      + "ON conflict(courseId)  DO NOTHING;";
+      create_PS(sql_addCourseIfNotExist);
 
+      for (int i = 0; i < n; i++) {
+        //从json文件中读取对应序号的信息，创造course_info对象，准备后续输入数据库中
+        course_info course_info = new course_info();
+        //将json文件中的course相关信息，导入course_info对象中
+        jsonToCourse(i, course_info, cnt);
+        //将course_info对象中的信息导入数据库中
+        courseToDatabase(course_info);
+        //将对应course_name->id的关系加载到hashmap中
+        if(!MAP_course.containsKey(course_info.getCourseName()))
+          MAP_course.put(course_info.getCourseName(), cnt);
+        //更新cnt计数器
+        cnt++;
+        //每加载到一定数值就执行一次数据库导入操作
+        if (cnt % BATCH_SIZE == 0) {
+          stmt.executeBatch();
+          stmt.clearBatch();
+        }
+      }
+      //最后再执行一次数据库导入操作
+      if (cnt % BATCH_SIZE != 0) {
+        stmt.executeBatch();
+        stmt.clearBatch();
+      }
+      CloseDB();
+      System.out.println("--FINISH INSERT INTO TABLE COURSE--\n");
+      System.out.println(cnt + " records successfully loaded in table : COURSE");
+    } catch (SQLException se) {
+      System.err.println("SQL error: " + se.getMessage());
+      try {
+        conn.rollback();
+        stmt.close();
+      } catch (Exception ignored) {
+      }
+      CloseDB();
+      System.exit(1);
+    }
+    //记录结束时间
+    long end = System.currentTimeMillis();
+    System.out.println("Loading speed : " + (cnt * 1000)/(end - start) + " records/s");
+    System.out.println("\033[32;4m" + "**************         SUCCESS         **************\n\n" + "\033[0m");
+  }
   //class数据的输入封装
-  private static void insert_Class(JsonArray jsonArray, Connection conn, int n)
-      throws SQLException {
-    for (int i = 0; i < n; i++) {
-      //构造查询，辅助class_info对象数据输入
-      String sql_get_courseId = "select id from course where courseName = ?";
-      PreparedStatement ps_get_CourseId = conn.prepareStatement(sql_get_courseId);
-      //从json文件中读取对应序号的信息，创造class_info对象，准备后续输入数据库中
-      class_info class_info = new class_info();
-      jsonToClass(jsonArray, ps_get_CourseId, i, class_info);
-      //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
-      String sql_add_Class = "INSERT INTO class(id, courseId, className) VALUES(DEFAULT, ?, ?)";
-      PreparedStatement ps_add_class = conn.prepareStatement(sql_add_Class);
-      //将class_info对象中的信息导入数据库中
-      classToDatabase(ps_add_class, class_info);
+  public static void insert_Class() {
+    System.out.println("\033[33;4m" + "**************  START LOADING CLASS  **************" + "\033[0m");
+    //清理原始数据,恢复自增列
+    try {
+      System.out.println("--START CLEAR TABLE CLASS--");
+      OpenDB();
+      if (conn != null) {
+        Statement stmt0 = conn.createStatement();
+        stmt0.execute("TRUNCATE TABLE class RESTART IDENTITY CASCADE");
+        stmt0.close();
+      }
+      CloseDB();
+      System.out.println("--FINISH CLEAR TABLE CLASS--\n");
+    } catch (SQLException e) {
+      System.err.println("TEST Database connection failed");
+      System.err.println(e.getMessage());
+      System.exit(1);
     }
-  }
 
+    int n = jsonArray.size();
+    int cnt = 0;
+    MAP_class.clear();
+
+    //记录开始时间
+    long start = System.currentTimeMillis();
+    try {
+      System.out.println("--START INSERT INTO TABLE CLASS--");
+      OpenDB();
+      //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
+      String sql_add_Class = "INSERT INTO class(id, courseId, className) VALUES(?, ?, ?)";
+      create_PS(sql_add_Class);
+
+      for (int i = 0; i < n; i++) {
+        //从json文件中读取对应序号的信息，创造class_info对象，准备后续输入数据库中
+        class_info class_info = new class_info();
+        //将json文件中的class相关信息，导入class_info对象中
+        jsonToClass(i, class_info, cnt);
+        //将class_info对象中的信息导入数据库中
+        classToDatabase(class_info);
+        //将对应class_name+course_name->id的关系加载到hashmap中
+        String key_name = class_info.getCourseName() + class_info.getClassName();
+        if(!MAP_class.containsKey(key_name))
+          MAP_class.put(key_name, cnt);
+        //更新cnt计数器
+        cnt++;
+        if (cnt % BATCH_SIZE == 0) {
+          stmt.executeBatch();
+          stmt.clearBatch();
+        }
+      }
+      if (cnt % BATCH_SIZE != 0) {
+        stmt.executeBatch();
+        stmt.clearBatch();
+      }
+      CloseDB();
+      System.out.println("--FINISH INSERT INTO TABLE CLASS--\n");
+      System.out.println(cnt + " records successfully loaded in table : CLASS");
+    } catch (SQLException se) {
+      System.err.println("SQL error: " + se.getMessage());
+      try {
+        conn.rollback();
+        stmt.close();
+      } catch (Exception ignored) {
+      }
+      CloseDB();
+      System.exit(1);
+    }
+    //记录结束时间
+    long end = System.currentTimeMillis();
+    System.out.println("Loading speed : " + (cnt * 1000)/(end - start) + " records/s");
+    System.out.println("\033[32;4m" + "**************         SUCCESS         **************\n\n" + "\033[0m");
+  }
   //teacher数据的输入封装
-  private static void insert_teacher(JsonArray jsonArray, Connection conn, int n)
-      throws SQLException {
-    for (int i = 0; i < n; i++) {
-      //构造查询，辅助teacher对象数据输入
-      String sql_get_classId = "select id from class where className = ?";
-      PreparedStatement ps_get_classId = conn.prepareStatement(sql_get_classId);
+  public static void insert_teacher(){
+    System.out.println("\033[33;4m" + "**************  START LOADING TEACHER  **************" + "\033[0m");
+    //清理原始数据,恢复自增列
+    try {
+      System.out.println("--START CLEAR TABLE TEACHER--");
+      OpenDB();
+      if (conn != null) {
+        Statement stmt0 = conn.createStatement();
+        stmt0.execute("TRUNCATE TABLE teacher RESTART IDENTITY CASCADE");
+        stmt0.close();
+      }
+      CloseDB();
+      System.out.println("--FINISH CLEAR TABLE TEACHER--\n");
+    } catch (SQLException e) {
+      System.err.println("TEST Database connection failed");
+      System.err.println(e.getMessage());
+      System.exit(1);
+    }
+
+    int n = jsonArray.size();
+    long cnt = 0;
+
+    //记录开始时间
+    long start = System.currentTimeMillis();
+    try {
+      System.out.println("--START INSERT INTO TABLE TEACHER--");
+      OpenDB();
       //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
       String sql_add_Teacher = "INSERT INTO teacher(id, classId, name) VALUES(DEFAULT,?,?)"
-          + "ON conflict(classId) DO NOTHING;";
-      PreparedStatement ps_addTeacher = conn.prepareStatement(sql_add_Teacher);
-      //从json文件中读取对应序号的信息，创造teacher对象，同时输入数据库中
-      jsonToTeacher(jsonArray, ps_get_classId, i, ps_addTeacher);
-    }
-  }
+              + "ON conflict(classId) DO NOTHING;";
+      create_PS(sql_add_Teacher);
 
+      for (int i = 0; i < n; i++) {
+        //从json文件中读取对应序号的信息，创造teacher对象，同时输入数据库中
+        jsonToTeacher(i);
+        cnt++;
+        if (cnt % BATCH_SIZE == 0) {
+          stmt.executeBatch();
+          stmt.clearBatch();
+        }
+      }
+      if (cnt % BATCH_SIZE != 0) {
+        stmt.executeBatch();
+        stmt.clearBatch();
+      }
+      CloseDB();
+      System.out.println("--FINISH INSERT INTO TABLE TEACHER--\n");
+      System.out.println(cnt + " records successfully loaded in table : TEACHER");
+    } catch (SQLException se) {
+      System.err.println("SQL error: " + se.getMessage());
+      try {
+        conn.rollback();
+        stmt.close();
+      } catch (Exception ignored) {
+      }
+      CloseDB();
+      System.exit(1);
+    }
+    //记录结束时间
+    long end = System.currentTimeMillis();
+    System.out.println("Loading speed : " + (cnt * 1000)/(end - start) + " records/s");
+    System.out.println("\033[32;4m" + "**************         SUCCESS         **************\n\n" + "\033[0m");
+  }
   //prerequisite数据的输入封装
-  private static void insert_pre(JsonArray jsonArray, Connection conn, int n) throws SQLException {
-    for (int i = 0; i < n; i++) {
-      prerequisite prerequisite = new prerequisite();
-      //构造查询 根据courseName查询course的id
-      String sql_get_courseId = "select id from course where courseName = ?";
-      PreparedStatement ps_get_CourseId = conn.prepareStatement(sql_get_courseId);
-      jsonToPre(jsonArray, ps_get_CourseId, i, prerequisite);
+  public static void insert_pre() {
+    System.out.println("\033[33;4m" + "**************  START LOADING PREREQUISITE  **************" + "\033[0m");
+    //清理原始数据,恢复自增列
+    try {
+      System.out.println("--START CLEAR TABLE PREREQUISITE--");
+      OpenDB();
+      if (conn != null) {
+        Statement stmt0 = conn.createStatement();
+        stmt0.execute("TRUNCATE TABLE prerequisite RESTART IDENTITY CASCADE");
+        stmt0.close();
+      }
+      CloseDB();
+      System.out.println("--FINISH CLEAR TABLE PREREQUISITE--\n");
+    } catch (SQLException e) {
+      System.err.println("TEST Database connection failed");
+      System.err.println(e.getMessage());
+      System.exit(1);
+    }
+
+    int n = jsonArray.size();
+    long cnt = 0;
+
+    //记录开始时间
+    long start = System.currentTimeMillis();
+    try {
+      System.out.println("--START INSERT INTO TABLE PREREQUISITE--");
+      OpenDB();
       //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
       String sql_add_Pre =
-          "INSERT INTO prerequisite(id, courseId, requisiteCourseId) VALUES(DEFAULT, ?, ?)"
-              + "ON conflict(courseId)  DO NOTHING;";
-      PreparedStatement ps_add_Pre = conn.prepareStatement(sql_add_Pre);
-      //将prerequisite对象中的信息导入数据库中（待完成）
-      preToDatabase(ps_add_Pre, prerequisite);
-    }
-  }
+              "INSERT INTO prerequisite(id, courseId, requisiteCourseId) VALUES(DEFAULT, ?, ?)"
+                      + "ON conflict(courseId)  DO NOTHING;";
+      create_PS(sql_add_Pre);
 
+      for (int i = 0; i < n; i++) {
+        //将json文件中的数据导入对象中
+        prerequisite prerequisite = new prerequisite();
+        jsonToPre(i, prerequisite);
+        //将prerequisite对象中的信息导入数据库中
+        preToDatabase(prerequisite);
+        cnt++;
+        if (cnt % BATCH_SIZE == 0) {
+          stmt.executeBatch();
+          stmt.clearBatch();
+        }
+      }
+      if (cnt % BATCH_SIZE != 0) {
+        stmt.executeBatch();
+        stmt.clearBatch();
+      }
+      CloseDB();
+      System.out.println("--FINISH INSERT INTO TABLE PREREQUISITE--\n");
+      System.out.println(cnt + " records successfully loaded in table : PREREQUISITE");
+    } catch (SQLException se) {
+      System.err.println("SQL error: " + se.getMessage());
+      try {
+        conn.rollback();
+        stmt.close();
+      } catch (Exception ignored) {
+      }
+      CloseDB();
+      System.exit(1);
+    }
+    //记录结束时间
+    long end = System.currentTimeMillis();
+    System.out.println("Loading speed : " + (cnt * 1000)/(end - start) + " records/s");
+    System.out.println("\033[32;4m" + "**************         SUCCESS         **************\n\n" + "\033[0m");
+  }
   //student数据的输入封装
-  private static void insert_student(BufferedReader br, Connection conn, int n)
-      throws IOException, SQLException {
-    //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
-    String sql_add_student = "INSERT INTO student(id, name, sex, department, studentId) VALUES(DEFAULT,?,?,?,?)";
-    PreparedStatement ps_addStudent = conn.prepareStatement(sql_add_student);
-    String new_line;
-    while ((new_line = br.readLine()) != null) {
-      student student = new student();
-      String[] info = new_line.split(",");
-      student.setName(info[0].trim());
-      student.setSex(info[1].trim());
-      student.setDepartment(info[2].trim());
-      student.setStudentId(Integer.parseInt(info[3].trim()));
-      studentToDatabase(ps_addStudent, student);
+  public static void insert_student(){
+    System.out.println("\033[33;4m" + "**************  START LOADING STUDENT  **************" + "\033[0m");
+    //清理原始数据,恢复自增列
+    try {
+      System.out.println("--START CLEAR TABLE STUDENT--");
+      OpenDB();
+      if (conn != null) {
+        Statement stmt0 = conn.createStatement();
+        stmt0.execute("TRUNCATE TABLE student RESTART IDENTITY CASCADE");
+        stmt0.close();
+      }
+      CloseDB();
+      System.out.println("--FINISH CLEAR TABLE STUDENT--\n");
+    } catch (SQLException e) {
+      System.err.println("TEST Database connection failed");
+      System.err.println(e.getMessage());
+      System.exit(1);
     }
+
+    long cnt = 0;
+    long cnt_class = 0;
+    String new_line;
+
+    //记录开始时间
+    long start = System.currentTimeMillis();
+    try {
+      System.out.println("--START INSERT INTO TABLE STUDENT--");
+      OpenDB();
+      //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
+      String sql_add_student = "INSERT INTO student(id, name, sex, department, studentId) VALUES(?,?,?,?,?)";
+      create_PS(sql_add_student);
+      String sql_add_studentClass = "INSERT INTO student_class(id, studentId, courseId) VALUES(DEFAULT,?,?)";
+      create_PS_2(sql_add_studentClass);
+
+      while ((new_line = br.readLine()) != null) {
+        student student = new student();
+        student_class student_class = new student_class();
+        String[] info = new_line.split(",");
+        student.setId((int) cnt);
+        student.setName(info[0]);
+        student.setSex(info[1]);
+        student.setDepartment(info[2]);
+        student.setStudentId(Integer.parseInt(info[3]));
+        student_class.setStudentId(student.getId());
+        for(int i = 4; i < info.length; i++)
+        {
+          student_class.setCourseId(info[i]);
+          studentClassToDatabase(student_class);
+          cnt_class++;
+          if (cnt_class % BATCH_SIZE_2 == 0) {
+            stmt2.executeBatch();
+            stmt2.clearBatch();
+          }
+        }
+        studentToDatabase(student);
+        cnt++;
+        if (cnt % BATCH_SIZE_2 == 0) {
+          stmt.executeBatch();
+          stmt.clearBatch();
+        }
+    }
+      if (cnt % BATCH_SIZE_2 != 0) {
+        stmt.executeBatch();
+        stmt.clearBatch();
+      }
+      if (cnt_class % BATCH_SIZE_2 != 0) {
+        stmt2.executeBatch();
+        stmt2.clearBatch();
+      }
+      CloseDB();
+      System.out.println("--FINISH INSERT INTO TABLE STUDENT--\n");
+      System.out.println(cnt + " records successfully loaded in table : STUDENT");
+    } catch (SQLException se) {
+      System.err.println("SQL error: " + se.getMessage());
+      try {
+        conn.rollback();
+        stmt.close();
+      } catch (Exception ignored) {
+      }
+      CloseDB();
+      System.exit(1);
+    } catch (IOException e) {
+      System.err.println("Fatal error: " + e.getMessage());
+      try {
+        conn.rollback();
+        stmt.close();
+      } catch (Exception ignored) {
+      }
+      CloseDB();
+      System.exit(1);
+    }
+    //记录结束时间
+    long end = System.currentTimeMillis();
+    System.out.println("Loading speed : " + (cnt * 1000)/(end - start) + " records/s");
+    System.out.println("\033[32;4m" + "**************         SUCCESS         **************\n\n" + "\033[0m");
+  }
+  //classList数据的输入封装
+  public static void insert_classList(){
+    System.out.println("\033[33;4m" + "**************  START LOADING CLASSLIST  **************" + "\033[0m");
+    //清理原始数据,恢复自增列
+    try {
+      System.out.println("--START CLEAR TABLE CLASSLIST--");
+      OpenDB();
+      if (conn != null) {
+        Statement stmt0 = conn.createStatement();
+        stmt0.execute("TRUNCATE TABLE classlist RESTART IDENTITY CASCADE");
+        stmt0.close();
+      }
+      CloseDB();
+      System.out.println("--FINISH CLEAR TABLE CLASSLIST--\n");
+    } catch (SQLException e) {
+      System.err.println("TEST Database connection failed");
+      System.err.println(e.getMessage());
+      System.exit(1);
+    }
+
+    int n = jsonArray.size();
+    long cnt = 0;
+
+    //记录开始时间
+    long start = System.currentTimeMillis();
+    try {
+      System.out.println("--START INSERT INTO TABLE CLASSLIST--");
+      OpenDB();
+      //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
+      String sql_add_classList =
+              "INSERT INTO classList(id, classId, weekList, location, classTime, weekday) VALUES(DEFAULT,?,?,?,?,?)";
+      create_PS(sql_add_classList);
+
+      for (int i = 0; i < n; i++) {
+        //获取classname
+        JsonObject jsonOBJ_courseArray = jsonArray.get(i).getAsJsonObject();
+        String class_name = jsonOBJ_courseArray.get("className").getAsString();
+        String course_name = jsonOBJ_courseArray.get("courseName").getAsString();
+        jsonArray_classList = jsonOBJ_courseArray.get("classList").getAsJsonArray();
+        //同类似方法，创造classList对象，准备后续输入数据库中
+        for (int j = 0; j < jsonArray_classList.size(); j++) {
+          //从json文件中读取对应序号的信息，创造classList对象，准备后续输入数据库中
+          classList classList = new classList();
+          jsonToClassList(j, classList, class_name, course_name);
+          //将course_info对象中的信息导入数据库中
+          classListToDatabase(classList);
+          cnt++;
+          if (cnt % BATCH_SIZE == 0) {
+            stmt.executeBatch();
+            stmt.clearBatch();
+          }
+        }
+      }
+      if (cnt % BATCH_SIZE != 0) {
+        stmt.executeBatch();
+        stmt.clearBatch();
+      }
+      CloseDB();
+      System.out.println("--FINISH INSERT INTO TABLE CLASSLIST--\n");
+      System.out.println(cnt + " records successfully loaded in table : CLASSLIST");
+    } catch (SQLException se) {
+      System.err.println("SQL error: " + se.getMessage());
+      try {
+        conn.rollback();
+        stmt.close();
+      } catch (Exception ignored) {
+      }
+      CloseDB();
+      System.exit(1);
+    }
+    //记录结束时间
+    long end = System.currentTimeMillis();
+    System.out.println("Loading speed : " + (cnt * 1000)/(end - start) + " records/s");
+    System.out.println("\033[32;4m" + "**************         SUCCESS         **************\n\n" + "\033[0m");
   }
 
-  //以下是几个所用到的最基础组件：
+  /***************************************数据库相关基础组件*********************************************/
   //将json文件中对应序号的数据读取并赋值给Java对象的组件
-  private static void jsonToCourse(JsonArray jsonArray, int index, course_info course_info) {
+  private static void jsonToCourse(int index, course_info course_info, int id) {
     JsonObject jsonOBJ_courseArray = jsonArray.get(index).getAsJsonObject();
+    course_info.setId(id);
     course_info.setCourseId(jsonOBJ_courseArray.get("courseId").getAsString());
     course_info.setCourseCredit(jsonOBJ_courseArray.get("courseCredit").getAsInt());
     course_info.setTotalCapacity(jsonOBJ_courseArray.get("totalCapacity").getAsInt());
@@ -161,36 +620,24 @@ public class connect {
     course_info.setCourseDept(jsonOBJ_courseArray.get("courseDept").getAsString());
     course_info.setCourseName(jsonOBJ_courseArray.get("courseName").getAsString());
   }
-
-  private static void jsonToClass(JsonArray jsonArray, PreparedStatement ps_get_CourseId, int index,
-      class_info class_info) throws SQLException {
-    //通过json找出需要查询的string:::course_name
+  private static void jsonToClass(int index, class_info class_info, int id) {
+    //通过json找出需要查询的string:::course_name, 并在hashMAP中找到对应的COURSE->ID
     JsonObject jsonOBJ_classArray = jsonArray.get(index).getAsJsonObject();
     String course_Name = jsonOBJ_classArray.get("courseName").getAsString();
-
-    //由于表间外键的存在，插入之前先要查询对应course_Name的courseId
-    ps_get_CourseId.setString(1, course_Name);
-    ResultSet resultSet = ps_get_CourseId.executeQuery();
-    resultSet.next();
-    int courseId = resultSet.getInt("id");
-
+    int courseId = MAP_course.get(course_Name);
     //将class_info对象中的信息插入数据库
+    class_info.setId(id);
     class_info.setCourseId(courseId);
     class_info.setClassName(jsonOBJ_classArray.get("className").getAsString());
+    class_info.setCourseName(course_Name);
   }
+  private static void jsonToTeacher(int index) throws SQLException {
 
-  private static void jsonToTeacher(JsonArray jsonArray, PreparedStatement ps_get_classId,
-      int index, PreparedStatement ps_addTeacher)
-      throws SQLException {
-    //通过json找出需要查询的string:::course_name
+    //通过json找出需要查询的string::course_name, 并在hashMAP中找到对应的CLASS->ID
     JsonObject jsonOBJ_classArray = jsonArray.get(index).getAsJsonObject();
     String class_Name = jsonOBJ_classArray.get("className").getAsString();
-
-    //由于标间外键的存在，插入之前先要查询对应course_Name的courseId
-    ps_get_classId.setString(1, class_Name);
-    ResultSet resultSet = ps_get_classId.executeQuery();
-    resultSet.next();
-    int classId = resultSet.getInt("id");
+    String course_Name = jsonOBJ_classArray.get("courseName").getAsString();
+    int classId = MAP_class.get(course_Name + class_Name);
 
     //将teacher对象中的信息插入数据库
     if (!jsonOBJ_classArray.get("teacher").equals(JsonNull.INSTANCE)) {
@@ -201,21 +648,15 @@ public class connect {
         teacher teacher = new teacher();
         teacher.setName(s);
         teacher.setClassId(classId);
-        teacherToDatabase(ps_addTeacher, teacher);
+        teacherToDatabase(teacher);
       }
     }
   }
-
-  private static void jsonToPre(JsonArray jsonArray, PreparedStatement ps_get_pre, int index,
-      prerequisite prerequisite) throws SQLException {
+  private static void jsonToPre(int index, prerequisite prerequisite) {
     JsonObject jsonOBJ_Pre = jsonArray.get(index).getAsJsonObject();
     String course_Name = jsonOBJ_Pre.get("courseName").getAsString();
 
-    // 由于表间外键的存在，插入之前先要查询对应course_Name的courseId
-    ps_get_pre.setString(1, course_Name);
-    ResultSet resultSet = ps_get_pre.executeQuery();
-    resultSet.next();
-    int courseId = resultSet.getInt("id");
+    int courseId = MAP_course.get(course_Name);
     prerequisite.setCourseId(courseId);
 
     // 检测先修课是否为空并且获取原始prerequisite字符串
@@ -230,44 +671,6 @@ public class connect {
     // 开始对字符串的转换处理模块
     // 以'|'分割
     String[] arr = pre.split("\\|");
-
-//    // 给括号加了间距的新数组
-//    int ind = 0;   //tem数组每个时刻的位置
-//    String[] tem = new String[2 * arr.length];
-//    for (String value : arr) {
-//      if (value.charAt(0) == '(') {
-//        tem[ind] = "(";
-//        ind++;
-//        tem[ind] = value.substring(1);
-//      } else if (value.charAt(value.length() - 1) == ')') {
-//        int length = value.length();
-//        tem[ind] = value.substring(0, length - 1);
-//        ind++;
-//        tem[ind] = ")";
-//      } else {
-//        tem[ind] = value;
-//      }
-//      ind++;
-//    }
-
-//    // 新字符串
-//    StringBuilder final_str = new StringBuilder();
-//    for (int i = 0; i < tem.length; i++) {
-//      if (tem[i] != null) {
-//        final_str.append(tem[i]);
-//        if (i != tem.length - 1) {
-//          final_str.append(" ");
-//        }
-//      } else {
-//        break;
-//      }
-//    }
-
-//    // 以空格分割
-//    String[] new_arr = final_str.toString().split("\\|");
-
-    // 临时变量
-    String temp;
 
     //替换加入最终数组中
     int lgh = arr.length;
@@ -296,10 +699,8 @@ public class connect {
           }
           break;
         default: {
-          ps_get_pre.setString(1, s);
-          ResultSet result_Set = ps_get_pre.executeQuery();
-          if (result_Set.next()) {
-            int course_Id = result_Set.getInt("id");
+          if (MAP_course.containsKey(s)) {
+            int course_Id = MAP_course.get(s);
             fin_arr[t] = course_Id;
           } else {
             fin_arr[t] = -5;
@@ -373,46 +774,71 @@ public class connect {
     //将最终处理完成的字符串放入目标对象中
     prerequisite.setPrerequisite_list(final_str.toString());
   }
+  private static void jsonToClassList(int index, classList classList, String class_Name, String course_Name) {
+    int classId = MAP_class.get(course_Name+class_Name);
+    JsonObject jsonOBJ_classList = jsonArray_classList.get(index).getAsJsonObject();
+
+    classList.setClassId(classId);
+    classList.setWeekList(jsonOBJ_classList.get("weekList").getAsJsonArray().toString());
+    classList.setLocation(jsonOBJ_classList.get("location").getAsString());
+    classList.setClassTime(jsonOBJ_classList.get("classTime").getAsString());
+    classList.setWeekday(jsonOBJ_classList.get("weekday").getAsInt());
+  }
 
   //将java对象中存储的数据导入数据库的组件
-  private static void courseToDatabase(PreparedStatement ps_addCourse, course_info course_info)
-      throws SQLException {
-    ps_addCourse.setInt(1, course_info.getTotalCapacity());
-    ps_addCourse.setString(2, course_info.getCourseId());
-    ps_addCourse.setInt(3, course_info.getCourseHour());
-    ps_addCourse.setInt(4, course_info.getCourseCredit());
-    ps_addCourse.setString(5, course_info.getCourseName());
-    ps_addCourse.setString(6, course_info.getCourseDept());
-    ps_addCourse.executeUpdate();
+  private static void courseToDatabase(course_info course_info) throws SQLException {
+    PreparedStatement ps_addCourse = stmt;
+    ps_addCourse.setInt(1, course_info.getId());
+    ps_addCourse.setInt(2, course_info.getTotalCapacity());
+    ps_addCourse.setString(3, course_info.getCourseId());
+    ps_addCourse.setInt(4, course_info.getCourseHour());
+    ps_addCourse.setInt(5, course_info.getCourseCredit());
+    ps_addCourse.setString(6, course_info.getCourseName());
+    ps_addCourse.setString(7, course_info.getCourseDept());
+    ps_addCourse.addBatch();
   }
-
-  private static void classToDatabase(PreparedStatement ps_addClass, class_info class_info)
-      throws SQLException {
-    ps_addClass.setInt(1, class_info.getCourseId());
-    ps_addClass.setString(2, class_info.getClassName());
-    ps_addClass.executeUpdate();
+  private static void classToDatabase(class_info class_info) throws SQLException {
+    PreparedStatement ps_addClass = stmt;
+    ps_addClass.setInt(1, class_info.getId());
+    ps_addClass.setInt(2, class_info.getCourseId());
+    ps_addClass.setString(3, class_info.getClassName());
+    ps_addClass.addBatch();
   }
-
-  private static void teacherToDatabase(PreparedStatement ps_addTeacher, teacher teacher)
-      throws SQLException {
+  private static void teacherToDatabase(teacher teacher) throws SQLException {
+    PreparedStatement ps_addTeacher = stmt;
     ps_addTeacher.setInt(1, teacher.getClassId());
     ps_addTeacher.setString(2, teacher.getName());
-    ps_addTeacher.executeUpdate();
+    ps_addTeacher.addBatch();
   }
-
-  public static void preToDatabase(PreparedStatement ps_addPre, prerequisite prerequisite)
-      throws SQLException {
+  public static void preToDatabase(prerequisite prerequisite) throws SQLException {
+    PreparedStatement ps_addPre = stmt;
     ps_addPre.setInt(1, prerequisite.getCourseId());
     ps_addPre.setString(2, prerequisite.getPrerequisite_list());
-    ps_addPre.executeUpdate();
+    ps_addPre.addBatch();
+  }
+  public static void studentToDatabase(student student) throws SQLException {
+    PreparedStatement ps_addTeacher = stmt;
+    ps_addTeacher.setInt(1, student.getId());
+    ps_addTeacher.setString(2, student.getName());
+    ps_addTeacher.setString(3, student.getSex());
+    ps_addTeacher.setString(4, student.getDepartment());
+    ps_addTeacher.setInt(5, student.getStudentId());
+    ps_addTeacher.addBatch();
+  }
+  public static void studentClassToDatabase(student_class student_class) throws SQLException {
+    PreparedStatement ps_addTeacher = stmt2;
+    ps_addTeacher.setInt(1, student_class.getStudentId());
+    ps_addTeacher.setString(2, student_class.getCourseId());
+    ps_addTeacher.addBatch();
+  }
+  private static void classListToDatabase(classList classList) throws SQLException {
+    PreparedStatement ps_add_classList = stmt;
+    ps_add_classList.setInt(1, classList.getClassId());
+    ps_add_classList.setString(2, classList.getWeekList());
+    ps_add_classList.setString(3, classList.getLocation());
+    ps_add_classList.setString(4, classList.getClassTime());
+    ps_add_classList.setInt(5, classList.getWeekday());
+    ps_add_classList.addBatch();
   }
 
-  public static void studentToDatabase(PreparedStatement ps_addTeacher, student student)
-      throws SQLException {
-    ps_addTeacher.setString(1, student.getName());
-    ps_addTeacher.setString(2, student.getSex());
-    ps_addTeacher.setString(3, student.getDepartment());
-    ps_addTeacher.setInt(4, student.getStudentId());
-    ps_addTeacher.executeUpdate();
-  }
 }

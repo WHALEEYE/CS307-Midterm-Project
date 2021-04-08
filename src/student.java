@@ -31,7 +31,16 @@ public class student {
         this.sex = sex;
     }
 
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
     private int studentId;
+    private int id;
     private String name;
     private String sex;
     private String department;

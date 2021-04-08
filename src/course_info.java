@@ -8,6 +8,14 @@ public class course_info {
   private String courseName;
   private String courseDept;
 
+  public int getId() {
+    return id;
+  }
+
+  public void setId(int id) {
+    this.id = id;
+  }
+
   public int getTotalCapacity() {
     return totalCapacity;
   }

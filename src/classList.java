@@ -2,12 +2,14 @@ public class classList {
 
   private int id;
   private int classId;
-  private String[] weekList;
+  private String weekList;
   private String location;
   private String classTime;
   private int weekday;
 
-  public classList(int id, int classId, String[] weekList, String location, String classTime,
+  public classList(){}
+
+  public classList(int id, int classId, String weekList, String location, String classTime,
       int weekday) {
     this.id = id;
     this.classId = classId;
@@ -33,11 +35,11 @@ public class classList {
     this.classId = classId;
   }
 
-  public String[] getWeekList() {
+  public String getWeekList() {
     return weekList;
   }
 
-  public void setWeekList(String[] weekList) {
+  public void setWeekList(String weekList) {
     this.weekList = weekList;
   }
 
