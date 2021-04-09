@@ -5,8 +5,17 @@ public class class_info {
   private String className;
   private String teacher;
   private String courseName;
+  private String courseId_real;
 
   public class_info() {}
+
+  public String getCourseId_real() {
+    return courseId_real;
+  }
+
+  public void setCourseId_real(String courseId_real) {
+    this.courseId_real = courseId_real;
+  }
 
   public String getCourseName() {
     return courseName;

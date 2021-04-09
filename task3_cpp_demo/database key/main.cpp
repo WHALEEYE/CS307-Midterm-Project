@@ -5,7 +5,7 @@ using namespace std;
 int main()
 {
     table t;
-    t.open("text");
+    t.open("F://code//task3_demo//text");
     t.matrix->insert("10 486432 55 10.1 grs 45");
     t.saveAs("hello");
     t.open("hello");
