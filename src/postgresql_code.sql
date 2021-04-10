@@ -1,35 +1,41 @@
 create table if not exists course
 (
-    Id            serial primary key,
+    Id            int                primary key,
     courseId      varchar(10) unique not null,
     courseCredit  int                not null,
     totalCapacity int                not null,
     courseHour    int                not null,
     courseName    varchar            not null,
     courseDept    varchar            not null,
-    constraint unique_course unique (courseName, courseDept)
+    requisiteCourseId varchar
 );
+
+drop table course;
 
 create table if not exists class
 (
-    Id  serial primary key ,
+    Id int primary key ,
     courseId integer,
     className varchar not null,
-    teacher varchar,
 
     constraint fk_courseId foreign key (courseId) references course(Id)
 );
+
+drop table class;
 
 create table if not exists classList
 (
     Id serial primary key ,
     classId integer,
-    weekList varchar[] not null,
+    weekList varchar not null,
     location varchar,
     classTime varchar not null ,
     weekDay integer not null ,
     constraint fk_courseId foreign key (classId) references class(Id)
 );
+
+drop table classList;
+
 
 create table if not exists prerequisite
 (
@@ -39,6 +45,8 @@ create table if not exists prerequisite
     constraint fk_courseId foreign key (courseId) references course(Id)
 );
 
+drop table prerequisite;
+
 create table if not exists teacher
 (
     Id serial primary key ,
@@ -47,25 +55,26 @@ create table if not exists teacher
     constraint fk_courseId foreign key (classId) references class(Id)
 );
 
+drop table teacher;
+
 create table if not exists student
 (
-    Id serial primary key ,
+    Id int primary key ,
     name varchar,
     sex varchar,
     department varchar,
     studentId int
 );
 
-delete from course;
-delete from class;
-delete from prerequisite;
-TRUNCATE TABLE course RESTART IDENTITY CASCADE;
-TRUNCATE TABLE class RESTART IDENTITY CASCADE;
-TRUNCATE TABLE prerequisite RESTART IDENTITY CASCADE;
+drop table student;
 
-select * from course where courseName = '毕业论文（设计）';
-alter table course add constraint unique_course unique (courseName, courseDept);
+create table if not exists student_class
+(
+    Id serial primary key ,
+    studentId int not null ,
+    courseId varchar(10),
+    constraint fk_studentId foreign key (studentId) references student(Id)
+);
 
-alter table course drop constraint unique_course;
+drop table student_class;
 
-select * from course where courseName like '%化学原理%';
