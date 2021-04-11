@@ -116,7 +116,220 @@ The preprocessed JSON file is shown in Figure 3-2.
 
 ### 2. Code structure of data importing
 
+The basic structure of our data_importing scrips is constructed by 3 steps :
 
+#### (1) Database connection part :
+
+Using  **JDBC**  to connect with database,  we need two things : Driver class and variables like `URL`  `User` and `Password`, then we will get a connection object which can handle all operations we do to the database.
+
+Consider the safety factor we catch the **Exception** the database send back, and do something about it like *role back* and *close database connection*.
+
+* ##### variables need to made a 'connection'
+
+  ```java
+  // 参数：
+  // jdbc协议:postgresql子协议://主机地址:数据库端口号/要连接的数据库名
+  String database_name = "postgres";
+  String host = "localhost:5432";
+  // 数据库用户名
+  String user = "postgres";
+  // 数据库密码
+  String password = "12345";
+  ```
+
+* ##### The functions of open database
+
+  ```java
+  private static void OpenDB() {
+    String url = "jdbc:postgresql://" + host + "/" + dbName;
+  
+    // 1. 加载Driver类，Driver类对象将自动被注册到DriverManager类中
+    try {
+      Class.forName("org.postgresql.Driver");
+    } catch (Exception e) {
+      System.err.println("Cannot find the Postgres driver. Check CLASSPATH.");
+      System.exit(1);
+    }
+  
+    // 2. 连接数据库，返回连接对象
+    try {
+      conn = DriverManager.getConnection(url, user, password);
+      System.out.println("Successfully connected to the database " + dbName + " as " user);
+      conn.setAutoCommit(false);
+    } catch (SQLException e) {
+      System.err.println("Database connection failed");
+      System.err.println(e.getMessage());
+      System.exit(1);
+    }
+  }
+  ```
+
+* ##### The functions of close database
+
+  ```java
+    private static void CloseDB() {
+      if (conn != null) {
+        try {
+        	// 如果存在未关闭的 prepared_statement 提交并关闭它
+          if (stmt != null) {
+            stmt.close();
+            stmt = null;
+          }
+          //提交connection中的内容并关闭connection
+          conn.commit();
+          conn.close();
+          conn = null;
+          System.out.println("Successfully close the database " + dbName + " as " + user);
+        } catch (Exception e) {
+          System.err.println("Close database failed");
+          System.err.println(e.getMessage());
+          System.exit(1);
+        }
+      }
+    }
+  ```
+
+<center style="font-family:Arial;font-weight:bold">Code 2-1. Connection to databse</center>
+
+#### （2)  JSON file connection part:
+
+​	Using the **GSON** lib to read from JSON file
+
+```java
+  //加载json文件中的信息到jsonArray
+  public static void loadFromJson(String fileLocation) {
+    try {
+      //新建解析json文件的模块
+      JsonParser parser = new JsonParser();  //创建JSON解析器
+      BufferedReader in = new BufferedReader(
+          new InputStreamReader(new FileInputStream(fileLocation), StandardCharsets.UTF_8),
+          50 * 1024 * 1024); //设置缓冲区 编码
+      jsonArray = (JsonArray) parser.parse(in);  //创建JsonArray对象
+    } catch (FileNotFoundException e) {
+      System.err.println("No JSON file found");
+      System.err.println(e.getMessage());
+      System.exit(1);
+    }
+  }
+```
+
+<center style="font-family:Arial;font-weight:bold">Code 2-2. Read json files</center>
+
+####  (3)  main data importing part : 
+
+​	We divide the whole things into 3 steps.
+
+* ##### test connection, clear the table and make "prepared statement"
+
+  ```java
+  try {
+    System.out.println("--START CLEAR TABLE COURSE--");
+    OpenDB();
+    if (conn != null) {
+   	Statement stmt0 = conn.createStatement();
+      stmt0.execute("TRUNCATE TABLE course RESTART IDENTITY CASCADE");
+      stmt0.close();
+    }
+    CloseDB();
+    System.out.println("--FINISH CLEAR TABLE COURSE--\n");
+  } catch (SQLException e) {
+    System.err.println("TEST Database connection failed");
+    System.err.println(e.getMessage());
+    System.exit(1);
+  }
+  ```
+
+  <center style="font-family:Arial;font-weight:bold">Code 2-3-1. test connection and clear the table</center>
+
+  ```java
+    //准备导入数据库所需的jdbc::PreparedStatement, 以及对应的sql语句
+    String sql_addCourseIfNotExist =
+        "INSERT INTO course(id, totalCapacity, courseId, courseHour, courseCredit, courseName, courseDept) VALUES(?,?,?,?,?,?,?)" + "ON conflict(courseId)  DO NOTHING;";
+    create_PS(sql_addCourseIfNotExist);
+  ```
+
+  ```java
+    private static void create_PS(String sql) {
+      try {
+        if (conn != null) {
+          stmt = conn.prepareStatement(sql);
+        } else {
+          System.err.println("Connection unaccomplished");
+        }
+      } catch (SQLException e) {
+        System.err.println("Insert statement failed");
+        System.err.println(e.getMessage());
+        CloseDB();
+        System.exit(1);
+      }
+    }
+  ```
+
+  <center style="font-family:Arial;font-weight:bold">Code 2-3-2. make prepared statement</center>
+
+* ##### loop reads from JSON file and load the information into the corresponding object
+
+  Although there is a time cost to re-depositing the information into the object，but we thought it would make our code more modular, which would help speed up and test later on.
+
+  ```java
+  //从json文件中读取对应序号的信息，创造course_info对象，准备后续输入数据库中
+  course_info course_info = new course_info();
+  //将json文件中的course相关信息，导入course_info对象中
+  jsonToCourse(i, course_info, cnt);
+  ```
+
+  Let's use Course as an example to show you how to parse a JSON file
+
+  ```java
+    private static void jsonToCourse(int index, course_info course_info, int id) {
+      //获取整个文件的JSONArray中目标序号的一条，作为JSONobject
+      JsonObject jsonOBJ_courseArray = jsonArray.get(index).getAsJsonObject();
+      //提取JSONobjects中的信息 存入对应对象中
+      course_info.setId(id);
+      course_info.setCourseId(jsonOBJ_courseArray.get("courseId").getAsString());
+      course_info.setCourseCredit(jsonOBJ_courseArray.get("courseCredit").getAsInt());
+      course_info.setTotalCapacity(jsonOBJ_courseArray.get("totalCapacity").getAsInt());
+      course_info.setCourseHour(jsonOBJ_courseArray.get("courseHour").getAsInt());
+      course_info.setCourseDept(jsonOBJ_courseArray.get("courseDept").getAsString());
+      course_info.setCourseName(jsonOBJ_courseArray.get("courseName").getAsString());
+    }
+  ```
+
+  <center style="font-family:Arial;font-weight:bold">Code 2-4. read from JSON files</center>
+
+* ##### load data into database
+
+  Loads the corresponding information to **Prepared Statement**, and then it loads into **Connection**
+
+  ```java
+  //将course_info对象中的信息导入数据库中
+  courseToDatabase(course_info);
+  ```
+
+  in this section, we use **add Batch** functions, which we will talk about it later in part 4.
+
+  ```java
+  private static void courseToDatabase(course_info course_info) throws SQLException {
+    PreparedStatement ps_addCourse = stmt;
+    ps_addCourse.setInt(1, course_info.getId());
+    ps_addCourse.setInt(2, course_info.getTotalCapacity());
+    ps_addCourse.setString(3, course_info.getCourseId());
+    ps_addCourse.setInt(4, course_info.getCourseHour());
+    ps_addCourse.setInt(5, course_info.getCourseCredit());
+    ps_addCourse.setString(6, course_info.getCourseName());
+    ps_addCourse.setString(7, course_info.getCourseDept());
+    ps_addCourse.addBatch();
+  }
+  ```
+
+  flush the Batch and execute the code in it.
+
+  ```java
+  stmt.executeBatch();
+  stmt.clearBatch();
+  ```
+
+  <center style="font-family:Arial;font-weight:bold">Code 2-5. load it into database</center>
 
 ### 3. Process of prerequisite
 
@@ -190,11 +403,196 @@ Figure 3-3 shows the final form of prerequisite in database. There are still one
 
 ### 4. Optimize the speed of importing
 
-1.MAP
+#### (1) BATCH
 
-2.BATCH
+​	The first time we completed the import, we found that it took a lot of time,through searching the reason, 	we found that the long time was caused by our repeated communication with the database.
 
+​	Every time we execute a database statement, a communication with the database occurs. This can be a 	huge time drain.
 
+* ##### bad version
+
+  The following code is executed each time an SQL statement is generated
+
+  ```java
+  psts.executeUpdate();
+  ```
+
+  <center style="font-family:Arial;font-weight:bold">Code 4-1. Bad code</center>
+
+* #####  what we done
+
+  * ###### close the **auto_commit** of `connection`
+
+    ​	if we don't close the **auto_commit** it will still commit each time we do something to the `connection`, the speed would stay slow.
+
+    ```java
+    conn.setAutoCommit(false);
+    ```
+
+  * ###### add Batch
+
+    ​	This code is executed after each SQL statement is generated, Its purpose is to put unprocessed SQL statements on a `stack`.
+
+    ​	In our test code we found that the first code add into batch will not execute until the last , just act like `FILO`.
+
+    ```java
+    psts.addBatch();
+    ```
+
+    ​	This code executes once after a certain number of passes, and that number of times is the **BATCH_SIZE **in the code. **BATCH_SIZE** is a very impotent variable, it will affect the speed of importing data.
+
+    ​	The greater **BATCH_SIZE** means that less time it will execute but more numbers of SQL it will execute in in the same time. Its a funny factors, because it generate a balance. 
+
+    ​	There is no BEST **BATCH_SIZE** for every one. It is factored by different grade of CPU you use. If your CPU is better then more SQL you can handle at the same time, so greater **BATCH_SIZE** will perfectly suit you. But if your CPU is not so good it cannot handle so much things, if you push him to do so by setting a very big **BATCH_SIZE**, it will Lift a stone only to drop it on your own feet. You will face more risk of a CPU error. So less **BATCH_SIZE** suits you more.
+
+    ```java
+    if (cnt % BATCH_SIZE == 0) {
+      stmt.executeBatch();
+      stmt.clearBatch();
+      conn.commit();
+    }
+    ```
+
+    ​	This code executes once when all SQL statement has load into Batch or already execute. This will ensure that after we insert into a table, all SQL will be executed, no data lose.
+
+    ```java
+    if (cnt % BATCH_SIZE != 0) {
+      stmt.executeBatch();
+      stmt.clearBatch();
+      conn.commit();
+    }
+    ```
+
+    <center style="font-family:Arial;font-weight:bold">Code 4-2. addBatch()</center>
+
+* ##### why it better
+
+  What we did was apply the Batch feature in JDBC, This touches on the different ways SQL commands are loaded in JDBC : **statement** and **prepared statement**
+
+  * ###### statement
+
+    Use the Statement object. The Statement object is used for processing when only one-time access to the database is performed. Prepared Statement objects are more expensive than statements and provide no additional benefit for one-time operations.
+
+  * ###### prepared statement
+
+    The SQL Statement is precompiled by the database system (if the JDBC driver supports it). The precompiled SQL query can be reused for future queries, making it faster than the query generated by the Statement object.
+
+  **So how can we choose from this two ?**
+
+  * ###### **prepared statement** is designed to be optimal for multiple use
+
+    ​	*The first execution of a Prepared Statement is expensive.* Its performance is reflected in the subsequent repeated execution. When we generate a basic query using **prepared statement** the JDBC driver sends a network request to parse the data and optimize the query. Execution generates another network request. *In JDBC drivers, reducing network traffic is the ultimate goal.* If my program requires only one request during execution, use **Statement**. For a **Statement**, the same query generates only one network-to-database communication.
+
+  * ###### **prepared statement** has greatly improved security
+
+    ​	If you use a precompiled statement. Anything you pass in will not have any matching relationship with the original statement. As long as you use all the precompiled statements, you don't have to worry about the incoming data. If you use a normal statement, you might want to specify a drop,;And so on to do painstaking judgment and overthinking.
+
+  So lets get back to **BATCH**
+
+  **Statement** and **prepared statement** performs different while using **BATCH**. 
+
+  ​	Using `Statement.addBatch(SQL)` to implement batch processing can send different types of SQL statements to the database, but these SQL statements are not precompiled and inefficient to execute. And you need to list each SQL statement. The `PreparedStatement.addBatch ()` can only be used in the same type parameters of different SQL statements, this form of batch is often used for bulk insert data in the same table, or batch update table data.
+
+  **conclusion**
+
+  ​	When the previous code communicates with the database, it establishes the connection first, and the cost of establishing the connection is the highest. Then it issues a SQL statement and closes the connection after execution. Another problem is that the SQL statements that are sent are sent over the network, which is also much more expensive than local calls .If you want to insert or update a batch of data into the database, or use the previous method, it will take a lot of time. However, if you use batch processing, you can save most of the cost in both convenience and the speed will be faster.
+
+#### (2) Hash_MAP
+
+To my surprise, after we use `BATCH` to make our code faster, our code has not become faster even a little bit. Its because that beside the `INSERT` statement, we still use a lot of `SELECT` statement while inserting data. It is the same reason why make our code slow. So reduce `SELECT ` must be done. 
+
+But how ? We choose ` HASH_MAP`.
+
+* ##### when we need hash_map ?
+
+  The answer is simple --- **foreign key**.
+
+  This is a relational database, so we must have `foreign key`, in order to maintain a `foreign key` we have to get the information of what `foreign key` is pointing to.
+
+  Like the `foreign key` between table `course` and `class`.
+
+  ![speed](.\pics\hash_map.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-1. foreign key</center>
+
+  As you can see, while we insert into table class, we have to know the information of `Id` in table `course`  using what we already known `courseId` in table `course`.
+
+  So we can maintain a `Hash_MAP` to store the relations of these two things.
+
+* ##### making Hash_MAP
+
+  create a Hash_MAP :
+
+  ```java
+  private static final Map<String, Integer> MAP_course = new HashMap<>();       //courseId->Id
+  ```
+
+  store the relation into it , while inserting the data into database : 
+
+  ```java
+  //将对应course_Id->id的关系加载到hashmap中
+  if (!MAP_course.containsKey(course_info.getCourseId())) {
+    MAP_course.put(course_info.getCourseId(), cnt);
+  }
+  ```
+
+  <center style="font-family:Arial;font-weight:bold">Code 4-3. Create Hash_MAP</center>
+
+* ##### using Hash_MAP
+
+  search from the Hash_MAP, to get what we need in O(1) time cost.
+
+  ```java
+  String course_Id_real = jsonOBJ_classArray.get("courseId").getAsString();
+  int courseId = MAP_course.get(course_Id_real);
+  class_info.setId(id);
+  ```
+
+  <center style="font-family:Arial;font-weight:bold">Code 4-4. Use Hash_MAP</center>
+
+#### (2)  what we achieve
+
+As we can see in diagram.  For table student in `csv` form,  while without speed up on `localhost` we got 3042 records / s.
+
+<img src=".\pics\student单表_本地_不加速.png" style="zoom: 50%;" />
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-2. Diagram of csv localhost no acceleration</center>
+
+ with speed up on `localhost` we got 110678 records / s. Unbelievably fast.
+
+<img src="E:\code\github_database_project\Database_Project\Report\pics\student单表_csv_size20000.png" style="zoom:50%;" />
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-3. Diagram of csv localhost with acceleration</center>
+
+Now lets look at the data on the server database. For table student in `csv` form,  while without speed up on `server` we got 27 records / s. Unbearably slow ! 
+
+<img src=".\pics\student单表_服务器_不加速.png" style="zoom:50%;" />
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-4. Diagram of csv server no acceleration</center>
+
+with speed up on `server` we got 5919 records / s. I can live with it.
+
+<img src=".\pics\student单表_csv_size30000.png" style="zoom:50%;" />
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-5. Diagram of csv server with acceleration</center>
+
+On `localhost` we got 36 times faster, but on `server` we got 108 times faster !!!
+
+Does it seems like the speed up code just have only a slight advantage on `localhost` ?  YES of course ! This is because of the cost of connecting with database on local host is very small. So that makes sense. 
+
+This diagram is really shocked but unfortunately  we can't see the data `unaccelerated localhost` because  it is too slow (only 27) .
+
+Another things we can see  is that , with different  `Batch_Size`  the `server` performance different with `localhost`. Data on the `server` shows that the less `Batch_size` we choose the better performance we got. But on `localhost` 30000 seems to be the best choice. This is because the CPU we got on `localhost` works better than  CPU on `server`. It validates what I said earlier .
+
+![](.\pics\学生表本地与服务器 .png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-5. Diagram of csv Files</center>
+
+This is the diagram of `JSON` files after acceleration. We want to show that because of read the `JSON` files need more time than `CSV` files.  so there is speed difference between` JSON` and `CSV`. And also because of the `JSON` files is much smaller than the `CSV` files, the acceleration rate of `JSON` files is smaller than `CSV` files .It validates what I said earlier .
+
+![](.\pics\json加速后.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-2. Diagram of JSON File</center>
 
 ### Part 4. Task 3 Implementation & Analysis
 
