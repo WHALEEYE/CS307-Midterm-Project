@@ -47,137 +47,10 @@ Table* t = new Table{"E-Commerce", 1, false, new Record{}};
 Record* temp_record;
 string key[10], value[10], temp_value[10];
 
-int cur, index_idx, changed;
-bool indexused;
+int cur, changed;
 vector<Record*> rset, temp;
 
-map<string, vector<Record*>>* temp_index;
-map<string, vector<Record*>>*InvoiceNo_index =
-                new map<string, vector<Record*>>(),
-            *StockCode_index = new map<string, vector<Record*>>(),
-            *CustomerID_index = new map<string, vector<Record*>>();
-map<string, vector<Record*>>::iterator map_itr;
-
 long long temp_time;
-
-void add_index(map<string, vector<Record*>>* index, string key, Record* value) {
-  map_itr = index->find(key);
-  if (map_itr != index->end()) {
-    map_itr->second.push_back(value);
-  } else {
-    temp.push_back(value);
-    index->insert(pair<string, vector<Record*>>(key, temp));
-    temp.pop_back();
-  }
-};
-
-void filter_index() {
-  cur = 0;
-  index_idx = -1;
-  indexused = false;
-  while (true) {
-    if (cur > 6) {
-      error_msg = "Error: Too much condition added.\n";
-      error_hap = true;
-      return;
-    }
-    cin >> key[cur];
-    if (key[cur] == "-1") {
-      break;
-    } else if (!indexused) {
-      if (key[cur] == "InvoiceNo" || key[cur] == "invoiceno") {
-        indexused = true;
-        index_idx = cur;
-        temp_index = InvoiceNo_index;
-      } else if (key[cur] == "StockCode" || key[cur] == "stockcode") {
-        indexused = true;
-        index_idx = cur;
-        temp_index = StockCode_index;
-      } else if (key[cur] == "CustomerID" || key[cur] == "customerid") {
-        indexused = true;
-        index_idx = cur;
-        temp_index = CustomerID_index;
-      }
-    }
-    cin >> value[cur];
-    cur++;
-  }
-  if (indexused) {
-    if (temp_index->count(value[index_idx])) {
-      rset = temp_index->at(value[index_idx]);
-    }
-  }
-  for (int j = 0; j < cur; j++) {
-    if (j == index_idx) {
-      continue;
-    }
-    if (key[j] == "InvoiceNo" || key[j] == "invoiceno") {
-      for (int i = 0; i < rset.size(); i++) {
-        if (rset[i]->InvoiceNo != value[j]) {
-          rset[i]->unselected = true;
-        }
-      }
-    } else if (key[j] == "StockCode" || key[j] == "stockcode") {
-      for (int i = 0; i < rset.size(); i++) {
-        if (rset[i]->StockCode != value[j]) {
-          rset[i]->unselected = true;
-        }
-      }
-    } else if (key[j] == "Quantity" || key[j] == "quantity") {
-      if (rset.size()) {
-        for (int i = 0; i < rset.size(); i++) {
-          if (rset[i]->Quantity != value[j]) {
-            rset[i]->unselected = true;
-          }
-        }
-      } else {
-        for (int i = 0; i < t->records.size(); i++) {
-          if (t->records[i]->Quantity == value[j]) {
-            rset.push_back(t->records[i]);
-          }
-        }
-      }
-    } else if (key[j] == "UnitPrice" || key[j] == "unitprice") {
-      if (rset.size()) {
-        for (int i = 0; i < rset.size(); i++) {
-          if (rset[i]->UnitPrice != value[j]) {
-            rset[i]->unselected = true;
-          }
-        }
-      } else {
-        for (int i = 0; i < t->records.size(); i++) {
-          if (t->records[i]->UnitPrice == value[j]) {
-            rset.push_back(t->records[i]);
-          }
-        }
-      }
-    } else if (key[j] == "CustomerID" || key[j] == "customerid") {
-      for (int i = 0; i < rset.size(); i++) {
-        if (rset[i]->CustomerID != value[j]) {
-          rset[i]->unselected = true;
-        }
-      }
-    } else if (key[j] == "Country" || key[j] == "country") {
-      if (rset.size()) {
-        for (int i = 0; i < rset.size(); i++) {
-          if (rset[i]->Country != value[j]) {
-            rset[i]->unselected = true;
-          }
-        }
-      } else {
-        for (int i = 0; i < t->records.size(); i++) {
-          if (t->records[i]->Country == value[j]) {
-            rset.push_back(t->records[i]);
-          }
-        }
-      }
-    } else {
-      error_msg = "Error: Invalid column name '" + key[j] + "'.\n";
-      error_hap = true;
-      return;
-    }
-  }
-};
 
 void filter_noindex() {
   cur = 0;
@@ -386,9 +259,6 @@ void insert() {
   }
   temp_record = new Record{temp_value[0], temp_value[1], temp_value[2],
                            temp_value[3], temp_value[4], temp_value[5]};
-  add_index(InvoiceNo_index, temp_value[0], temp_record);
-  add_index(StockCode_index, temp_value[1], temp_record);
-  add_index(CustomerID_index, temp_value[4], temp_record);
   t->records.push_back(temp_record);
 };
 
@@ -416,9 +286,6 @@ void load_table() {
     getline(ss, temp_record->CustomerID, ',');
     getline(ss, temp_record->Country, '\x0D');
     t->records.push_back(temp_record);
-    add_index(InvoiceNo_index, temp_record->InvoiceNo, temp_record);
-    add_index(StockCode_index, temp_record->StockCode, temp_record);
-    add_index(CustomerID_index, temp_record->CustomerID, temp_record);
     ss.clear();
   }
   std::chrono::steady_clock::time_point ed1 = std::chrono::steady_clock::now();
@@ -494,7 +361,7 @@ int main() {
         cout << "> Error: NormalUser are not permitted to change tables.";
         cin.ignore(INT64_MAX, '\n');
       } else {
-        filter_index();
+        filter_noindex();
         if (error_hap) {
           cout << error_msg;
           continue;
@@ -513,7 +380,7 @@ int main() {
         cout << "> Error: NormalUser are not permitted to change tables.";
         cin.ignore(INT64_MAX, '\n');
       } else {
-        filter_index();
+        filter_noindex();
         update();
         for (int i = 0; i < rset.size(); i++) {
           if (!rset[i]->unselected && !rset[i]->deleted) {
@@ -524,7 +391,7 @@ int main() {
         cout << "> Query Succeded. " << changed << " Rows updated.";
       }
     } else if (op == "select") {
-      filter_index();
+      filter_noindex();
       if (error_hap) {
         cout << error_msg;
         continue;
@@ -532,7 +399,7 @@ int main() {
       print_select(t->title);
       for (int i = 0; i < rset.size(); i++) {
         if (!rset[i]->unselected && !rset[i]->deleted) {
-          // print_select(rset[i]);
+          print_select(rset[i]);
           changed++;
         }
         rset[i]->unselected = false;

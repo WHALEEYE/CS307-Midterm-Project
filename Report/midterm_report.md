@@ -333,6 +333,8 @@ Consider the safety factor we catch the **Exception** the database send back, an
 
 ### 3. Process of prerequisite
 
+#### (1) Implementation
+
 We processed the prerequisite expression in two steps:
 
 1. Change the string expression into an **integer** array.
@@ -393,16 +395,48 @@ When we go through all the elements in the array, pop all the items left in the 
 
 Code 3-2 shows the Java code of generating the post-order expression.
 
+#### (2) Advantages
+
+This implementation has four advantages.
+
+* ##### High Compatibility
+
+  This method of transforming into post-order can process any form of Boolean expressions and store it into database, no matter it's a SOP, POS, or a complicated expression.
+
+* ##### One row in table
+
+  This method only need one row to store in database, and it can allow column `prerequisite` to be directly stored in table `course` instead of storing it in a new table and adding foreign keys.
+
+  This will reduce the complexity of query.
+
+* ##### Easy to resolve
+
+  Post-order expressions is a computer-friendly form of expression. Thus, it's easy to resolve when we use it in the future.
+
+* ##### Optimizable
+
+  When we decide if someone satisfies the prerequisite, we need to connect to the database and calculate the expression while querying.
+
+  If one expression have `n` courses, the number we query the database can be **equal or less than** `n` after optimizing. 
+
+#### (3) Problems
+
 ![prerequisite_field](./pics/prerequisite_field.png)
 
 <center style="font-family:Arial;font-weight:bold">Figure 3-3. Prerequisite in database</center>
 
-Figure 3-3 shows the final form of prerequisite in database. There are still one problem that the number of Boolean operators might exceed the reasonable bound. The reason is shown below:
+Figure 3-3 shows the final form of prerequisite in database. There are still one problem that the number of Boolean operators might exceed the reasonable bound as we highlighted in the figure. The reason is shown below:
 
+```
+(A or B) and (C or D) 	--[A and B Invalid]--> 		() and (C or D)
+() and (C or D) 		--[postorder]--------> 		C D or and
+```
 
+However, after some calculation, we found that only when there are more than two layers of brackets, this problem cause bugs. Since there are no data in prerequisite that have more than two layers of brackets, this problem has no influence. We only need to calculate the post-order expression in the normal steps and simply ignore the Boolean operators left.
 
 ### 4. Optimize the speed of importing
 
+<<<<<<< Updated upstream
 #### (1) BATCH
 
 ​	The first time we completed the import, we found that it took a lot of time,through searching the reason, 	we found that the long time was caused by our repeated communication with the database.
@@ -593,15 +627,402 @@ This is the diagram of `JSON` files after acceleration. We want to show that bec
 ![](.\pics\json加速后.png)
 
 <center style="font-family:Arial;font-weight:bold">Figure 4-2. Diagram of JSON File</center>
+=======
 
-### Part 4. Task 3 Implementation & Analysis
 
-#### (1) Brief Introduction & Running examples
+## Part 4. Task 3 Implementation & Analysis
 
-#### (2) Basic structure
+### 1. Brief Introduction
 
-#### (3) Implementation of Index
+Our dataset is a dataset about E-Commerce found in [Kaggle](https://www.kaggle.com/datasets). Figure 4-1 shows the detail of the dataset.
 
-#### (4) User privileges management 
+![dataset](./pics/dataset.png)
 
-#### (5) Compare with databases on different platforms
+<center style="font-family:Arial;font-weight:bold">Figure 4-1. E-Commerce dataset</center>
+
+We implemented this using `C++`, and we ran this program on `Windows(x86)` and `Linux(x86)`.
+
+
+
+### 2. Basic structure
+
+I designed two `structs`, `Table `and `Record `to represent the structure of a table.
+
+The basic structure of a table is a `vector` of `Record*`.
+
+```cpp
+void filter_index() {
+  cur = 0;
+  index_idx = -1;
+  indexused = false;
+  while (true) {
+    if (cur > 6) {
+      error_msg = "Error: Too much condition added.\n";
+      error_hap = true;
+      return;
+    }
+    cin >> key[cur];
+    if (key[cur] == "-1") {
+      break;
+    } else if (!indexused) {
+      if (key[cur] == "InvoiceNo" || key[cur] == "invoiceno") {
+        indexused = true;
+        index_idx = cur;
+        temp_index = InvoiceNo_index;
+      } else if (key[cur] == "StockCode" || key[cur] == "stockcode") {
+        indexused = true;
+        index_idx = cur;
+        temp_index = StockCode_index;
+      } else if (key[cur] == "CustomerID" || key[cur] == "customerid") {
+        indexused = true;
+        index_idx = cur;
+        temp_index = CustomerID_index;
+      }
+    }
+    cin >> value[cur];
+    cur++;
+  }
+  if (indexused) {
+    if (temp_index->count(value[index_idx])) {
+      rset = temp_index->at(value[index_idx]);
+    }
+  }
+  for (int j = 0; j < cur; j++) {
+    if (j == index_idx) {
+      continue;
+    }
+    if (key[j] == "InvoiceNo" || key[j] == "invoiceno") {
+      for (int i = 0; i < rset.size(); i++) {
+        if (rset[i]->InvoiceNo != value[j]) {
+          rset[i]->unselected = true;
+        }
+      }
+    } else if (key[j] == "StockCode" || key[j] == "stockcode") {
+      for (int i = 0; i < rset.size(); i++) {
+        if (rset[i]->StockCode != value[j]) {
+          rset[i]->unselected = true;
+        }
+      }
+    } else if (key[j] == "Quantity" || key[j] == "quantity") {
+      if (rset.size()) {
+        for (int i = 0; i < rset.size(); i++) {
+          if (rset[i]->Quantity != value[j]) {
+            rset[i]->unselected = true;
+          }
+        }
+      } else {
+        for (int i = 0; i < t->records.size(); i++) {
+          if (t->records[i]->Quantity == value[j]) {
+            rset.push_back(t->records[i]);
+          }
+        }
+      }
+    } else if (key[j] == "UnitPrice" || key[j] == "unitprice") {
+      if (rset.size()) {
+        for (int i = 0; i < rset.size(); i++) {
+          if (rset[i]->UnitPrice != value[j]) {
+            rset[i]->unselected = true;
+          }
+        }
+      } else {
+        for (int i = 0; i < t->records.size(); i++) {
+          if (t->records[i]->UnitPrice == value[j]) {
+            rset.push_back(t->records[i]);
+          }
+        }
+      }
+    } else if (key[j] == "CustomerID" || key[j] == "customerid") {
+      for (int i = 0; i < rset.size(); i++) {
+        if (rset[i]->CustomerID != value[j]) {
+          rset[i]->unselected = true;
+        }
+      }
+    } else if (key[j] == "Country" || key[j] == "country") {
+      if (rset.size()) {
+        for (int i = 0; i < rset.size(); i++) {
+          if (rset[i]->Country != value[j]) {
+            rset[i]->unselected = true;
+          }
+        }
+      } else {
+        for (int i = 0; i < t->records.size(); i++) {
+          if (t->records[i]->Country == value[j]) {
+            rset.push_back(t->records[i]);
+          }
+        }
+      }
+    } else {
+      error_msg = "Error: Invalid column name '" + key[j] + "'.\n";
+      error_hap = true;
+      return;
+    }
+  }
+};
+```
+
+<center style="font-family:Arial;font-weight:bold">Code 4-1. Function of finding rows</center>
+
+Code 4-1 shows the function of finding rows we wanted, which is the core code of this program.
+
+We first generate a result set by one of the select conditions, then we go through the other conditions to exclude the rows from the current result set. At last, the rows remaining in the result set are the rows we want.
+
+
+
+### 3. Index
+
+We want to prove that adding index can speed up the operations of selecting, but it will slow down the speed of updating, deleting, inserting and table loading.
+
+#### (1) Implementation
+
+We implemented index by `map` in `C++`, which is actually supported by a binary tree.
+
+This is similar to the index structure in database.
+
+```cpp
+map<string, vector<Record*>> *InvoiceNo_index = new map<string, vector<Record*>>(),
+							 *StockCode_index = new map<string, vector<Record*>>(),
+            				 *CustomerID_index = new map<string, vector<Record*>>();
+
+void add_index(map<string, vector<Record*>>* index, string key, Record* value) {
+  map_itr = index->find(key);
+  if (map_itr != index->end()) {
+    map_itr->second.push_back(value);
+  } else {
+    temp.push_back(value);
+    index->insert(pair<string, vector<Record*>>(key, temp));
+    temp.pop_back();
+  }
+};
+```
+
+<center style="font-family:Arial;font-weight:bold">Code 4-2. Function of adding indexes</center>
+
+Since we don't have column with unique constraints, our index is a map from `string` (column values) to a `vector` of `Record*`. The function of adding indexes is shown in Code 4-2.
+
+#### (2) Advantages
+
+![](./pics/adding_index_influence.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-4. Adding Indexes' Influences on Execution Time
+</center>
+
+As we mentioned above, when we are selecting rows, we will first generate a result set (actually a `vector` of `Record*`) according to one of the conditions.
+
+After adding indexes, if we find one of the conditions is applied on a column with index, then we will use it to generate the result set. Just find the value of the index map (a `vector` of `Record*`) and copy it to the result set. This is also shown in Code 4-1.
+
+Adding index will save a lot of time than matching all the rows one by one. In testcases, the average query time reduced about `80%` after adding index. This is shown in Figure 4-4.
+
+#### (3) Drawbacks
+
+After adding index, every time a new row is inserted, the index must be updated. More indexes, more time cost.
+
+We added index on three of the columns. After adding indexes, the time cost in loading table raised about `60%`. This is also shown in Figure 4-4.
+
+Also, after adding index, there are a lot more memory used to store the indexes (`map` in my program).
+
+#### (4) Analysis
+
+Adding index can improve the speed of finding corresponding rows, while it will slow down the speed of inserting, updating, deleting rows. Also, it will cause more storage cost.
+
+In most cases, there are far more select operations that other operations, so adding index on some of the columns is recommended in most cases.
+
+
+
+### 4. User privileges management
+
+We want to prove that database have complicated user privilege management and schema managements.
+
+#### (1) Our implementation
+
+I used a struct to represent the users. They have three different privileges: `SuperUser`, `Admin` and `NormalUser`. This is shown in Code 4-3.
+
+```c++
+enum priv { SuperUser, Admin, NormalUser };
+struct User {
+  string userName;
+  string password;
+  priv identity;
+};
+map<string, User*> user_list;
+```
+
+<center style="font-family:Arial;font-weight:bold">Code 4-3. User privileges implementation</center>
+
+There are only one `SuperUser`, who can create users, lift privileges and check privileges.
+
+`Admin` can `insert`, `delete`, `update`, `select` the table.
+
+`NormalUser` can only `select` the table.
+
+Any user can switch to any other user by username and password.
+
+These are all demonstrated in Figure 4-6.
+
+![](./pics/user_priv.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-4. User privileges demonstration</center>
+
+#### (2) Database Privileges
+
+We tested PostgreSQL on it's privilege management and schema managements. The details are shown in Figure 4-5.
+
+![psql_user_priv](.\pics\psql_user_priv.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-5. PostgreSQL user privileges</center>
+
+#### (3) Compare
+
+PostgreSQL's user privilege management is based on schema management, and the privileges one user have can be divided into small parts like `select`, `insert`, `update`, `delete` and so on. Also, if we have gave a user some privileges, we cannot delete the user until we revoke the privileges.
+
+Compared with our program, the database's implementation of user privilege management is far more complicated compact. In the same time, it's also more flexible because it can be divided into small parts.
+
+
+
+### 5. Query & IO Speed
+
+We want to prove that DBMS has more effective data management methods, so DBMS will have higher speed in query and IO.
+
+We tested our program and two different DBMS, PostgreSQL and MySQL, on the platform of Windows(x86) and Linux(x86).
+
+#### (1) Our Program
+
+* ##### Windows
+
+  The load time (I/O time cost) and CRUD time on Windows are shown in Figure 4-6-a, 4-6-b, 4-6-c.
+
+  ![win_program_load](.\pics\win_program_load.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-6-a. Windows I/O time (Program)</center>
+
+  ![win_program_select](.\pics\win_program_select.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-6-b. Windows select time (Program)</center>
+
+![win_program_CRUD](.\pics\win_program_CRUD.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-6-c. Windows CRUD time (Program)</center>
+
+* ##### Linux
+
+  The load time (I/O time cost) and CRUD time on Linux are shown in Figure 4-7-a, 4-7-b, 4-7-c.
+
+![linux_program_load](.\pics\linux_program_load.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-7-a. Linux I/O time (Program)</center>
+
+![linux_program_select](.\pics\linux_program_select.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-7-b. Linux select time (Program)</center>
+
+![linux_program_CRUD](.\pics\linux_program_CRUD.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-7-c. Linux CRUD time (Program)</center>
+
+#### (2) PostgreSQL
+
+* ##### Windows
+
+  The load time (I/O time cost) and CRUD time on Windows are shown in Figure 4-8-a, 4-8-b, 4-8-c.
+
+  ![win_program_load](.\pics\win_psql_load.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-8-a. Windows I/O time (PostgreSQL)</center>
+
+  ![win_program_select](.\pics\win_psql_select.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-8-b. Windows select time (PostgreSQL)</center>
+
+  ![win_program_CRUD](.\pics\win_psql_CRUD.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-8-c. Windows CRUD time (PostgreSQL)</center>
+
+* ##### Linux
+
+  The load time (I/O time cost) and CRUD time on Linux are shown in Figure 4-9-a, 4-9-b, 4-9-c.
+
+  ![linux_psql_load](.\pics\linux_psql_load.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-9-a. Linux I/O time (PostgreSQL)</center>
+
+  ![linux_psql_select](.\pics\linux_psql_select.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-9-b. Linux select time (PostgreSQL)</center>
+
+  ![linux_psql_CRUD](.\pics\linux_psql_CRUD.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-9-c. Linux CRUD time (PostgreSQL)</center>
+
+#### (3) MySQL
+
+* ##### Windows
+
+  The load time (I/O time cost) and CRUD time on Windows are shown in Figure 4-10-a, 4-10-b, 4-10-c.
+
+  ![win_mysql_load](.\pics\win_mysql_load.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-10-a. Windows I/O time (MySQL)</center>
+
+  ![win_mysql_select](.\pics\win_mysql_select.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-10-b. Windows select time (MySQL)</center>
+
+  ![win_mysql_CRUD](.\pics\win_mysql_CRUD.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-10-c. Windows CRUD time (MySQL)</center>
+
+* ##### Linux
+
+  The load time (I/O time cost) and CRUD time on Linux are shown in Figure 4-11-a, 4-11-b, 4-11-c.
+
+  ![linux_mysql_load](.\pics\linux_mysql_load.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-11-a. Linux I/O time (MySQL)</center>
+
+  ![linux_mysql_select](.\pics\linux_mysql_select.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-11-b. Linux select time (MySQL)</center>
+
+  ![linux_mysql_CRUD](.\pics\linux_mysql_CRUD.png)
+
+  <center style="font-family:Arial;font-weight:bold">Figure 4-11-c. Linux CRUD time (MySQL)</center>
+
+#### (4) Analysis
+
+We designed two diagrams shown as Figure 4-12-a and 4-12-b to visualize the data.
+
+![windows_comp](./pics\windows_comp.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-12-a. Execution time compare (Windows)</center>
+
+![linux_comp](.\pics\linux_comp.png)
+
+<center style="font-family:Arial;font-weight:bold">Figure 4-12-b. Execution time compare (Linux)</center>
+
+#### (5) Compare
+
+Compared with Windows, Linux system's speed is about one time faster on the whole.
+
+* In I/O speed, our program is similar to PostgreSQL, while MySQL is always about 2 times slower than our program.
+
+* In select and CRUD speed, DBMS are much more slower than our program, especially MySQL.
+
+So generally, our program has the highest speed, and MySQL has the lowest speed.
+
+We want to prove that DBMS are more effective, but the result is contradictory to our expectation.
+
+We think there are some possible explanations:
+
+1. For DBMS, there are much more "unnecessary" things to handle while executing a DML statement, like log recording, data organizing and so on to make sure it will be stable and reliable, while our program will just do the "necessary" things: just update, select, delete or insert rows.
+2. DBMS need to manage multiple tables and databases at the same time, along with complicated privilege management and schemas, while our program just simulated one table with no schema and a simple privilege management.
+3. DBMS might interactive with hard disk during execution, for they need to store the data into disk if there are too much data in buffer, so there might be I/O time cost, while our program will just load the table into memory and interactive with memory all the time.
+>>>>>>> Stashed changes
+
+
+
+### 6. Conclusion
+
+DBMS is effective on the premise of full and reliable functions.
+
+Just as what we compared above, DBMS have a lot of excellent designs, such as index, user privilege management and so on. It's meaningless if we just compare the execution time of our program with DBMS if we don't take all of the other functions into consideration.
+
+Anyhow, DBMS have it's own reason for being so classic and existing for such a long time.
